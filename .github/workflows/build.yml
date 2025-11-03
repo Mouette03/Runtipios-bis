@@ -45,11 +45,15 @@ jobs:
           echo "START_BOOT=$START_BOOT" >> $GITHUB_ENV
           echo "START_ROOT=$START_ROOT" >> $GITHUB_ENV
 
-      - name: Mount partitions
+      - name: Mount partitions with separate loop devices
         run: |
           mkdir -p mnt mnt/boot
-          sudo mount -o loop,offset=$((START_ROOT * 512)) $IMAGE_DIR/raspios.img mnt
-          sudo mount -o loop,offset=$((START_BOOT * 512)) $IMAGE_DIR/raspios.img mnt/boot
+          LOOP_BOOT=$(sudo losetup --find --show --offset $((START_BOOT * 512)) $IMAGE_DIR/raspios.img)
+          LOOP_ROOT=$(sudo losetup --find --show --offset $((START_ROOT * 512)) $IMAGE_DIR/raspios.img)
+          echo "LOOP_BOOT=$LOOP_BOOT" >> $GITHUB_ENV
+          echo "LOOP_ROOT=$LOOP_ROOT" >> $GITHUB_ENV
+          sudo mount $LOOP_ROOT mnt
+          sudo mount $LOOP_BOOT mnt/boot
 
       - name: Copy RuntipiOS files
         run: |
@@ -65,10 +69,13 @@ jobs:
           sudo cp mnt/opt/runtipi-hotspot/scripts/runtipi-*.service mnt/etc/systemd/system/
           sudo chroot mnt systemctl enable runtipi-hotspot.service runtipi-wifi.service || true
 
-      - name: Unmount partitions
+      - name: Unmount partitions and detach loop devices
+        if: always()
         run: |
           sudo umount mnt/boot || true
           sudo umount mnt || true
+          sudo losetup -d $LOOP_BOOT || true
+          sudo losetup -d $LOOP_ROOT || true
 
       - name: Compress final image
         run: |
