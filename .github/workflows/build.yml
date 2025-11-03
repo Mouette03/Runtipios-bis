@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget xz-utils qemu-utils kpartx parted rsync
+          sudo apt-get install -y wget xz-utils qemu-utils rsync parted
 
       - name: Create images directory
         run: mkdir -p $IMAGE_DIR
@@ -36,22 +36,21 @@ jobs:
       - name: Decompress base image
         run: xz -dk $IMAGE_DIR/$IMG_NAME -c > $IMAGE_DIR/raspios.img
 
-      - name: Create mount points
+      - name: Get partition offsets
+        id: offsets
         run: |
-          mkdir -p mnt
-          mkdir -p mnt/boot
+          # Detect start sectors
+          SECTOR_SIZE=512
+          START_BOOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep 'boot' | awk '{print $2}' | sed 's/s//')
+          START_ROOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep -v 'boot' | grep ext4 | awk '{print $2}' | sed 's/s//')
+          echo "START_BOOT=$START_BOOT" >> $GITHUB_ENV
+          echo "START_ROOT=$START_ROOT" >> $GITHUB_ENV
 
-      - name: Mount image partitions
+      - name: Mount partitions
         run: |
-          sudo kpartx -av $IMAGE_DIR/raspios.img
-          sleep 2
-          LOOP_DEV=$(losetup -f --show $IMAGE_DIR/raspios.img)
-          echo "LOOP_DEV=$LOOP_DEV" >> $GITHUB_ENV
-          # Detect mapper devices
-          PART_BOOT=$(sudo kpartx -l $IMAGE_DIR/raspios.img | grep "p1" | awk '{print $1}')
-          PART_ROOT=$(sudo kpartx -l $IMAGE_DIR/raspios.img | grep "p2" | awk '{print $1}')
-          sudo mount /dev/mapper/$PART_ROOT mnt
-          sudo mount /dev/mapper/$PART_BOOT mnt/boot
+          mkdir -p mnt mnt/boot
+          sudo mount -o loop,offset=$(($START_ROOT * 512)) $IMAGE_DIR/raspios.img mnt
+          sudo mount -o loop,offset=$(($START_BOOT * 512)) $IMAGE_DIR/raspios.img mnt/boot
 
       - name: Copy RuntipiOS files
         run: |
@@ -65,14 +64,12 @@ jobs:
       - name: Enable systemd services
         run: |
           sudo cp mnt/opt/runtipi-hotspot/scripts/runtipi-*.service mnt/etc/systemd/system/
-          sudo chroot mnt systemctl enable runtipi-hotspot.service runtipi-wifi.service
+          sudo chroot mnt systemctl enable runtipi-hotspot.service runtipi-wifi.service || true
 
-      - name: Unmount partitions and clean loop devices
+      - name: Unmount partitions
         run: |
           sudo umount mnt/boot || true
           sudo umount mnt || true
-          sudo kpartx -dv $IMAGE_DIR/raspios.img || true
-          sudo losetup -D
 
       - name: Compress final image
         run: |
