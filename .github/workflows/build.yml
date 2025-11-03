@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget xz-utils qemu-utils rsync parted
+          sudo apt-get install -y wget xz-utils rsync parted
 
       - name: Create images directory
         run: mkdir -p $IMAGE_DIR
@@ -39,18 +39,17 @@ jobs:
       - name: Get partition offsets
         id: offsets
         run: |
-          # Detect start sectors
           SECTOR_SIZE=512
-          START_BOOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep 'boot' | awk '{print $2}' | sed 's/s//')
-          START_ROOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep -v 'boot' | grep ext4 | awk '{print $2}' | sed 's/s//')
+          START_BOOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep 'boot' | awk '{print $2}' | sed 's/s//' | tr -d '\n')
+          START_ROOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep -v 'boot' | grep ext4 | awk '{print $2}' | sed 's/s//' | tr -d '\n')
           echo "START_BOOT=$START_BOOT" >> $GITHUB_ENV
           echo "START_ROOT=$START_ROOT" >> $GITHUB_ENV
 
       - name: Mount partitions
         run: |
           mkdir -p mnt mnt/boot
-          sudo mount -o loop,offset=$(($START_ROOT * 512)) $IMAGE_DIR/raspios.img mnt
-          sudo mount -o loop,offset=$(($START_BOOT * 512)) $IMAGE_DIR/raspios.img mnt/boot
+          sudo mount -o loop,offset=$((START_ROOT * 512)) $IMAGE_DIR/raspios.img mnt
+          sudo mount -o loop,offset=$((START_BOOT * 512)) $IMAGE_DIR/raspios.img mnt/boot
 
       - name: Copy RuntipiOS files
         run: |
