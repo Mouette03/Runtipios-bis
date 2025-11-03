@@ -89,6 +89,11 @@ jobs:
       - name: Setup userconf.txt
         run: sudo bash mnt/opt/runtipi-hotspot/scripts/00-setup-userconf.sh mnt/boot mnt/opt/runtipi-hotspot/config.yml
 
+      - name: Configure system settings (hostname, locale, timezone, etc.)
+        run: |
+          sudo chmod +x mnt/opt/runtipi-hotspot/scripts/05-setup-system.sh
+          sudo bash mnt/opt/runtipi-hotspot/scripts/05-setup-system.sh mnt mnt/opt/runtipi-hotspot/config.yml
+
       - name: Setup hotspot dependencies in chroot
         run: |
           # Copy qemu-aarch64-static for ARM64 emulation in chroot
@@ -106,7 +111,7 @@ jobs:
           
           # Run hotspot setup script in chroot to install dependencies
           echo "Installing hotspot dependencies..."
-          sudo chroot mnt /bin/bash -c "cd /opt/runtipi-hotspot/scripts && bash 10-setup-hotspot.sh"
+          sudo chroot mnt /bin/bash -c "cd /opt/runtipi-hotspot/scripts && bash 10-setup-hotspot.sh /opt/runtipi-hotspot/config.yml"
           
           # Verify installations
           echo "Verifying installed packages..."
@@ -124,6 +129,9 @@ jobs:
           # Enable services using systemctl in chroot
           echo "Enabling runtipi-wifi.service..."
           sudo chroot mnt systemctl enable runtipi-wifi.service
+          
+          echo "Enabling runtipios-firstboot.service..."
+          sudo chroot mnt systemctl enable runtipios-firstboot.service
           
           # Note: runtipi-hotspot.service is started conditionally by detect-network.sh
           # but we ensure it's available

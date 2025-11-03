@@ -6,6 +6,15 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "=== $(date) - Runtipi Network Detection Started ==="
 
+# Read configuration
+CONFIG_FILE="/opt/runtipi-hotspot/config.yml"
+if [ -f "$CONFIG_FILE" ]; then
+    HOTSPOT_SSID=$(grep -A2 'wifi_connect:' "$CONFIG_FILE" | grep 'ssid:' | awk '{print $2}' | tr -d '"' | tr -d "'")
+    HOTSPOT_SSID="${HOTSPOT_SSID:-RuntipiOS-Setup}"
+else
+    HOTSPOT_SSID="RuntipiOS-Setup"
+fi
+
 # Wait a bit for network interfaces to initialize
 sleep 10
 
@@ -119,7 +128,7 @@ else
   echo ""
   echo "=========================================="
   echo "✓ Hotspot is ready!"
-  echo "   SSID: RuntipiOS-Setup"
+  echo "   SSID: $HOTSPOT_SSID"
   echo "   Password: runtipi123"
   echo "   Portal: http://192.168.4.1"
   echo "=========================================="

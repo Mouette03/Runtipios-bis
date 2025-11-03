@@ -1,0 +1,84 @@
+# ===================================================
+# Configuration RuntipiOS - Example Advanced Config
+# ===================================================
+# Copy this file to config.yml and customize
+
+raspios:
+  # Base Raspberry Pi OS image URL
+  # Find latest versions at: https://www.raspberrypi.com/software/operating-systems/
+  url: "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2025-10-02/2025-10-01-raspios-trixie-arm64-lite.img.xz"
+  arch: "arm64"  # arm64 (64-bit) or armhf (32-bit)
+
+system:
+  # Hostname that appears on the network
+  # Access your device at: ssh user@hostname.local
+  hostname: "runtipios"
+  
+  # Timezone - see: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  # Examples: "Europe/Paris", "America/New_York", "Asia/Tokyo"
+  timezone: "Europe/Paris"
+  
+  # System locale - language and character encoding
+  # Examples: "en_US.UTF-8", "fr_FR.UTF-8", "de_DE.UTF-8"
+  locale: "fr_FR.UTF-8"
+  
+  # Keyboard layout
+  # Examples: "us", "fr", "de", "uk", "es", "it"
+  keyboard_layout: "fr"
+  
+  # WiFi country code (required for regulatory compliance)
+  # ISO 3166-1 alpha-2 country codes
+  # Examples: "FR", "US", "GB", "DE", "CA", "AU"
+  wifi_country: "FR"
+  
+  # Default user account credentials
+  default_user: "runtipi"
+  default_password: "runtipi"  # CHANGE THIS IN PRODUCTION!
+  
+  # Autologin on console (tty1)
+  # true: Automatically log in as default_user on boot (useful for debugging)
+  # false: Show login prompt (more secure for servers)
+  autologin: false
+  
+  # Show custom RuntipiOS welcome message on login
+  show_motd: true
+
+runtipi:
+  # Automatically install Runtipi when Ethernet is detected
+  # true: Install Runtipi automatically on first boot with internet
+  # false: Manual installation required
+  auto_install: true
+
+wifi_connect:
+  # Configuration for WiFi setup hotspot
+  version: "1.0"
+  
+  # Hotspot SSID (network name) when no Ethernet is connected
+  # This appears in WiFi network lists
+  ssid: "RuntipiOS-Setup"
+  
+  # Note: Password is hardcoded as "runtipi123" in scripts
+  # To change, edit: runtipios/scripts/10-setup-hotspot.sh
+
+build:
+  # Future: Resize partition to this size in GB
+  image_size: 4
+  
+  # Compression format for final image
+  # Options: "xz" (best compression), "gz" (faster)
+  compression_format: "xz"
+
+# ===================================================
+# Security Recommendations
+# ===================================================
+# 1. Change default_password to a strong password
+# 2. Keep autologin: false for production deployments
+# 3. Change WiFi hotspot password in 10-setup-hotspot.sh
+# 4. Use SSH keys instead of passwords after first boot
+# 5. Consider changing default_user to something unique
+#
+# After first boot, secure your system:
+#   ssh runtipi@runtipios.local
+#   passwd  # Change password
+#   sudo apt update && sudo apt upgrade -y
+# ===================================================

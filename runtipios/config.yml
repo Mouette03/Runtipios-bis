@@ -13,7 +13,7 @@ system:
   wifi_country: "FR"
   default_user: "runtipi"
   default_password: "runtipi"
-  autologin: false
+  autologin: true
   show_motd: true
 
 runtipi:

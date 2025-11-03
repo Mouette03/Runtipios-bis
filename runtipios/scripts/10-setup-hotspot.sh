@@ -3,6 +3,26 @@ set -e
 
 echo "=== Installing Hotspot Dependencies ==="
 
+# Check if config file path is provided
+CONFIG_FILE="${1:-/opt/runtipi-hotspot/config.yml}"
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo "Reading configuration from: $CONFIG_FILE"
+    HOTSPOT_SSID=$(grep -A2 'wifi_connect:' "$CONFIG_FILE" | grep 'ssid:' | awk '{print $2}' | tr -d '"' | tr -d "'")
+    WIFI_COUNTRY=$(grep 'wifi_country:' "$CONFIG_FILE" | awk '{print $2}' | tr -d '"' | tr -d "'")
+    
+    # Set defaults if not found
+    HOTSPOT_SSID="${HOTSPOT_SSID:-RuntipiOS-Setup}"
+    WIFI_COUNTRY="${WIFI_COUNTRY:-FR}"
+    
+    echo "  Hotspot SSID: $HOTSPOT_SSID"
+    echo "  WiFi Country: $WIFI_COUNTRY"
+else
+    echo "Config file not found, using defaults"
+    HOTSPOT_SSID="RuntipiOS-Setup"
+    WIFI_COUNTRY="FR"
+fi
+
 # Update package lists
 apt-get update
 
@@ -52,11 +72,11 @@ EOF
 
 # Configure hostapd
 echo "Configuring hostapd..."
-cat <<'EOF' > /etc/hostapd/hostapd.conf
+cat <<EOF > /etc/hostapd/hostapd.conf
 # Runtipi Hotspot Configuration
 interface=wlan0
 driver=nl80211
-ssid=RuntipiOS-Setup
+ssid=$HOTSPOT_SSID
 hw_mode=g
 channel=7
 ieee80211n=1
@@ -69,6 +89,7 @@ wpa_passphrase=runtipi123
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 rsn_pairwise=CCMP
+country_code=$WIFI_COUNTRY
 EOF
 
 # Set hostapd to use our config
@@ -123,7 +144,7 @@ touch /etc/wpa_supplicant/wpa_supplicant.conf
 cat <<EOF > /etc/wpa_supplicant/wpa_supplicant.conf
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
-country=FR
+country=$WIFI_COUNTRY
 
 EOF
 
