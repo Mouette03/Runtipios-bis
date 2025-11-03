@@ -17,7 +17,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget xz-utils rsync parted
+          # Add tools for loop/partition mapping and filesystem handling
+          sudo apt-get install -y wget xz-utils rsync parted kpartx dosfstools e2fsprogs
 
       - name: Create images directory
         run: mkdir -p $IMAGE_DIR
@@ -36,24 +37,22 @@ jobs:
       - name: Decompress base image
         run: xz -dk $IMAGE_DIR/$IMG_NAME -c > $IMAGE_DIR/raspios.img
 
-      - name: Get partition offsets
-        id: offsets
-        run: |
-          SECTOR_SIZE=512
-          START_BOOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep 'boot' | awk '{print $2}' | sed 's/s//' | tr -d '\n')
-          START_ROOT=$(parted -s $IMAGE_DIR/raspios.img unit s print | grep -v 'boot' | grep ext4 | awk '{print $2}' | sed 's/s//' | tr -d '\n')
-          echo "START_BOOT=$START_BOOT" >> $GITHUB_ENV
-          echo "START_ROOT=$START_ROOT" >> $GITHUB_ENV
-
-      - name: Mount partitions with separate loop devices
+      - name: Mount image and map partitions
+        id: mountimage
         run: |
           mkdir -p mnt mnt/boot
-          LOOP_BOOT=$(sudo losetup --find --show --offset $((START_BOOT * 512)) $IMAGE_DIR/raspios.img)
-          LOOP_ROOT=$(sudo losetup --find --show --offset $((START_ROOT * 512)) $IMAGE_DIR/raspios.img)
-          echo "LOOP_BOOT=$LOOP_BOOT" >> $GITHUB_ENV
-          echo "LOOP_ROOT=$LOOP_ROOT" >> $GITHUB_ENV
-          sudo mount $LOOP_ROOT mnt
-          sudo mount $LOOP_BOOT mnt/boot
+          # Create a loop device and have the kernel create partition devices (e.g. /dev/loop0p1)
+          LOOPDEV=$(sudo losetup --find --show -P $IMAGE_DIR/raspios.img)
+          echo "LOOPDEV=$LOOPDEV" >> $GITHUB_ENV
+          # Common Raspberry Pi images have p1=boot (FAT) and p2=root (ext4)
+          BOOT_PART=${LOOPDEV}p1
+          ROOT_PART=${LOOPDEV}p2
+          echo "BOOT_PART=$BOOT_PART" >> $GITHUB_ENV
+          echo "ROOT_PART=$ROOT_PART" >> $GITHUB_ENV
+          # Wait a moment for devices to appear
+          sudo sleep 1
+          sudo mount $ROOT_PART mnt
+          sudo mount $BOOT_PART mnt/boot
 
       - name: Copy RuntipiOS files
         run: |
@@ -74,8 +73,14 @@ jobs:
         run: |
           sudo umount mnt/boot || true
           sudo umount mnt || true
-          sudo losetup -d $LOOP_BOOT || true
-          sudo losetup -d $LOOP_ROOT || true
+          # Detach loop device if set
+          if [ -n "$LOOPDEV" ]; then
+            sudo losetup -d $LOOPDEV || true
+          else
+            # Fallback: try to detach LOOP_BOOT/LOOP_ROOT if present
+            [ -n "$LOOP_BOOT" ] && sudo losetup -d $LOOP_BOOT || true
+            [ -n "$LOOP_ROOT" ] && sudo losetup -d $LOOP_ROOT || true
+          fi
 
       - name: Compress final image
         run: |
