@@ -1,0 +1,81 @@
+name: Build RuntipiOS Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    env:
+      BASE_DIR: ${{ github.workspace }}
+      IMAGE_DIR: ${{ github.workspace }}/images
+      RUNTIPIOS_DIR: ${{ github.workspace }}/runtipios
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget xz-utils qemu-utils kpartx parted rsync
+
+      - name: Create images directory
+        run: mkdir -p $IMAGE_DIR
+
+      - name: Read base image URL from config
+        id: readconfig
+        run: |
+          IMG_URL=$(grep 'url:' $RUNTIPIOS_DIR/config.yml | awk '{print $2}' | tr -d '"')
+          echo "IMG_URL=$IMG_URL" >> $GITHUB_ENV
+          IMG_NAME=$(basename $IMG_URL)
+          echo "IMG_NAME=$IMG_NAME" >> $GITHUB_ENV
+
+      - name: Download base Raspberry Pi OS image
+        run: |
+          wget -O $IMAGE_DIR/$IMG_NAME $IMG_URL
+
+      - name: Decompress base image
+        run: |
+          xz -dk $IMAGE_DIR/$IMG_NAME -c > $IMAGE_DIR/raspios.img
+
+      - name: Mount image partitions
+        run: |
+          sudo kpartx -av $IMAGE_DIR/raspios.img
+          sleep 2
+          LOOP_DEV=$(losetup -l | grep $(basename $IMAGE_DIR/raspios.img .img) | awk '{print $1}')
+          echo "LOOP_DEV=$LOOP_DEV" >> $GITHUB_ENV
+          sudo mount /dev/mapper/$(basename $IMAGE_DIR/raspios.img)p2 mnt
+          sudo mount /dev/mapper/$(basename $IMAGE_DIR/raspios.img)p1 mnt/boot
+
+      - name: Copy RuntipiOS files
+        run: |
+          sudo rsync -a $RUNTIPIOS_DIR/scripts mnt/opt/runtipi-hotspot/
+          sudo rsync -a $RUNTIPIOS_DIR/www mnt/opt/runtipi-hotspot/
+          sudo cp $RUNTIPIOS_DIR/config.yml mnt/opt/runtipi-hotspot/
+
+      - name: Setup userconf.txt
+        run: |
+          sudo bash mnt/opt/runtipi-hotspot/scripts/00-setup-userconf.sh mnt/boot mnt/opt/runtipi-hotspot/config.yml
+
+      - name: Enable systemd services
+        run: |
+          sudo cp mnt/opt/runtipi-hotspot/scripts/runtipi-*.service mnt/etc/systemd/system/
+          sudo chroot mnt systemctl enable runtipi-hotspot.service runtipi-wifi.service
+
+      - name: Unmount partitions
+        run: |
+          sudo umount mnt/boot
+          sudo umount mnt
+          sudo kpartx -dv $IMAGE_DIR/raspios.img
+
+      - name: Compress final image
+        run: |
+          xz -T0 -z $IMAGE_DIR/raspios.img
+          mv $IMAGE_DIR/raspios.img.xz $IMAGE_DIR/runtipios.img.xz
+
+      - name: Upload compressed image
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtipios-image
+          path: $IMAGE_DIR/runtipios.img.xz
