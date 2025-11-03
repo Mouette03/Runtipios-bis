@@ -18,7 +18,7 @@ jobs:
         run: |
           sudo apt-get update
           # Add tools for loop/partition mapping and filesystem handling
-          sudo apt-get install -y wget xz-utils rsync parted kpartx dosfstools e2fsprogs
+          sudo apt-get install -y wget xz-utils rsync parted kpartx dosfstools e2fsprogs qemu-user-static binfmt-support
 
       - name: Create images directory
         run: mkdir -p $IMAGE_DIR
@@ -91,6 +91,9 @@ jobs:
 
       - name: Setup hotspot dependencies in chroot
         run: |
+          # Copy qemu-aarch64-static for ARM64 emulation in chroot
+          sudo cp /usr/bin/qemu-aarch64-static mnt/usr/bin/ || sudo cp /usr/bin/qemu-arm-static mnt/usr/bin/ || true
+          
           # Bind mount necessary system directories for chroot
           sudo mount --bind /dev mnt/dev
           sudo mount --bind /proc mnt/proc
