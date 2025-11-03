@@ -84,11 +84,18 @@ jobs:
 
       - name: Compress final image
         run: |
-          xz -T0 -z $IMAGE_DIR/raspios.img
-          mv $IMAGE_DIR/raspios.img.xz $IMAGE_DIR/runtipios.img.xz
+          # Fail early with a helpful message if the image isn't present
+          if [ ! -f "$IMAGE_DIR/raspios.img" ]; then
+            echo "ERROR: $IMAGE_DIR/raspios.img not found"
+            ls -l $IMAGE_DIR || true
+            exit 1
+          fi
+          # Compress explicitly to the target filename to avoid mv race conditions
+          xz -T0 -c $IMAGE_DIR/raspios.img > $IMAGE_DIR/runtipios.img.xz
+          ls -lh $IMAGE_DIR
 
       - name: Upload compressed image
         uses: actions/upload-artifact@v4
         with:
           name: runtipios-image
-          path: $IMAGE_DIR/runtipios.img.xz
+          path: ${{ env.IMAGE_DIR }}/runtipios.img.xz
