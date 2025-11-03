@@ -89,10 +89,49 @@ jobs:
       - name: Setup userconf.txt
         run: sudo bash mnt/opt/runtipi-hotspot/scripts/00-setup-userconf.sh mnt/boot mnt/opt/runtipi-hotspot/config.yml
 
-      - name: Enable systemd services
+      - name: Setup hotspot dependencies in chroot
         run: |
+          # Bind mount necessary system directories for chroot
+          sudo mount --bind /dev mnt/dev
+          sudo mount --bind /proc mnt/proc
+          sudo mount --bind /sys mnt/sys
+          sudo mount --bind /dev/pts mnt/dev/pts
+          
+          # Make scripts executable
+          sudo chmod +x mnt/opt/runtipi-hotspot/scripts/*.sh
+          sudo chmod +x mnt/opt/runtipi-hotspot/scripts/*.py
+          
+          # Run hotspot setup script in chroot to install dependencies
+          echo "Installing hotspot dependencies..."
+          sudo chroot mnt /bin/bash -c "cd /opt/runtipi-hotspot/scripts && bash 10-setup-hotspot.sh"
+          
+          # Verify installations
+          echo "Verifying installed packages..."
+          sudo chroot mnt /bin/bash -c "dpkg -l | grep -E 'nginx|dnsmasq|hostapd|python3'" || true
+
+      - name: Install and enable systemd services
+        run: |
+          # Copy service files
           sudo cp mnt/opt/runtipi-hotspot/scripts/runtipi-*.service mnt/etc/systemd/system/
-          sudo chroot mnt systemctl enable runtipi-hotspot.service runtipi-wifi.service || true
+          
+          # Verify service files are present
+          echo "Service files installed:"
+          ls -la mnt/etc/systemd/system/runtipi-*.service
+          
+          # Enable services using systemctl in chroot
+          echo "Enabling runtipi-wifi.service..."
+          sudo chroot mnt systemctl enable runtipi-wifi.service
+          
+          # Note: runtipi-hotspot.service is started conditionally by detect-network.sh
+          # but we ensure it's available
+          echo "Services enabled:"
+          sudo chroot mnt systemctl list-unit-files | grep runtipi || true
+          
+          # Unmount chroot binds
+          sudo umount mnt/dev/pts || true
+          sudo umount mnt/sys || true
+          sudo umount mnt/proc || true
+          sudo umount mnt/dev || true
 
       - name: Unmount partitions and detach loop devices
         if: always()
