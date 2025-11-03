@@ -1,0 +1,10 @@
+[Unit]
+Description=Runtipi Wi-Fi Detection Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/runtipi-hotspot/scripts/detect-network.sh
+
+[Install]
+WantedBy=multi-user.target

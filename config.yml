@@ -1,0 +1,28 @@
+# ===================================================
+# Configuration RuntipiOS
+# ===================================================
+raspios:
+  url: "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2025-10-02/2025-10-01-raspios-trixie-arm64-lite.img.xz"
+  arch: "arm64"
+
+system:
+  hostname: "runtipios"
+  timezone: "Europe/Paris"
+  locale: "fr_FR.UTF-8"
+  keyboard_layout: "fr"
+  wifi_country: "FR"
+  default_user: "runtipi"
+  default_password: "runtipi"
+  autologin: false
+  show_motd: true
+
+runtipi:
+  auto_install: true
+
+wifi_connect:
+  version: "1.0"
+  ssid: "RuntipiOS-Setup"
+
+build:
+  image_size: 4
+  compression_format: "xz"

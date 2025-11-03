@@ -1,0 +1,12 @@
+[Unit]
+Description=Runtipi Hotspot Captive Portal
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd.conf
+ExecStartPost=/usr/bin/python3 /opt/runtipi-hotspot/scripts/save_wifi.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

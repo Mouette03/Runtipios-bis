@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="auto">
+<head>
+<meta charset="utf-8">
+<title>Runtipi Wi-Fi Setup</title>
+<style>
+body { font-family: sans-serif; text-align: center; margin-top: 10%; }
+img { width: 120px; }
+input, button { padding: 8px; margin: 5px; border-radius: 8px; }
+</style>
+<script>
+function detectLang(){
+  const lang = navigator.language || navigator.userLanguage;
+  if(lang.startsWith('fr')){
+    document.getElementById('title').innerText = "Configuration Wi-Fi Runtipi";
+    document.getElementById('ssid').placeholder = "Nom du réseau Wi-Fi";
+    document.getElementById('password').placeholder = "Mot de passe Wi-Fi";
+    document.getElementById('connect').innerText = "Se connecter";
+  }
+}
+</script>
+</head>
+<body onload="detectLang()">
+<img src="runtipi.png" alt="Runtipi Logo">
+<h2 id="title">Runtipi Wi-Fi Setup</h2>
+<form action="/save" method="POST">
+  <input id="ssid" name="ssid" placeholder="Wi-Fi name"><br>
+  <input id="password" name="password" type="password" placeholder="Wi-Fi password"><br>
+  <button id="connect" type="submit">Connect</button>
+</form>
+<p>Once connected, Runtipi will be available at <b>http://runtipi.local</b></p>
+</body></html>
