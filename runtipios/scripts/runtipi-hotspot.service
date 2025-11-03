@@ -1,18 +1,16 @@
 [Unit]
-Description=Runtipi Hotspot Captive Portal
-After=network.target dnsmasq.service
-Requires=dnsmasq.service
+Description=Runtipi Hotspot Access Point
+After=network.target
+ConditionPathExists=/etc/hostapd/hostapd.conf
 
 [Service]
 Type=forking
-ExecStartPre=/bin/sleep 2
-ExecStartPre=/sbin/ip addr add 192.168.4.1/24 dev wlan0 || true
-ExecStartPre=/sbin/ip link set wlan0 up || true
-ExecStart=/usr/sbin/hostapd -B /etc/hostapd/hostapd.conf
-ExecStartPost=/bin/sleep 2
-ExecStartPost=/usr/bin/python3 /opt/runtipi-hotspot/scripts/save_wifi.py
+PIDFile=/run/hostapd.pid
+ExecStart=/usr/sbin/hostapd -B -P /run/hostapd.pid /etc/hostapd/hostapd.conf
+ExecStop=/bin/kill -TERM $MAINPID
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+TimeoutStartSec=30
 
 [Install]
 WantedBy=multi-user.target
