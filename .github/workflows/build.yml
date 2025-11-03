@@ -34,8 +34,26 @@ jobs:
       - name: Download base Raspberry Pi OS image
         run: wget -O $IMAGE_DIR/$IMG_NAME $IMG_URL
 
+      - name: Verify downloaded image
+        run: |
+          echo "Listing $IMAGE_DIR"
+          ls -lh $IMAGE_DIR || true
+          echo "file:"; file $IMAGE_DIR/$IMG_NAME || true
+          echo "xz list:"; xz -l $IMAGE_DIR/$IMG_NAME || true
+          echo "sha256:"; sha256sum $IMAGE_DIR/$IMG_NAME || true
+
       - name: Decompress base image
-        run: xz -dk $IMAGE_DIR/$IMG_NAME -c > $IMAGE_DIR/raspios.img
+        run: |
+          if [ ! -f "$IMAGE_DIR/$IMG_NAME" ]; then
+            echo "ERROR: $IMAGE_DIR/$IMG_NAME not found after download"
+            ls -l $IMAGE_DIR || true
+            exit 1
+          fi
+          echo "Decompressing $IMAGE_DIR/$IMG_NAME to $IMAGE_DIR/raspios.img"
+          sudo apt-get install -y xz-utils || true
+          xz -d -k -c "$IMAGE_DIR/$IMG_NAME" > "$IMAGE_DIR/raspios.img"
+          echo "Decompressed file:"; ls -lh $IMAGE_DIR/raspios.img || true
+
 
       - name: Mount image and map partitions
         id: mountimage
@@ -51,6 +69,14 @@ jobs:
           echo "ROOT_PART=$ROOT_PART" >> $GITHUB_ENV
           # Wait a moment for devices to appear
           sudo sleep 1
+          # Sanity checks: show partition layout and ensure expected partition nodes exist
+          echo "lsblk:"; lsblk || true
+          echo "parted:"; sudo parted -s $IMAGE_DIR/raspios.img unit s print || true
+          if [ ! -b "$ROOT_PART" ] || [ ! -b "$BOOT_PART" ]; then
+            echo "ERROR: expected partition block devices not found: $BOOT_PART $ROOT_PART"
+            ls -l /dev | grep $(basename $LOOPDEV) || true
+            exit 1
+          fi
           sudo mount $ROOT_PART mnt
           sudo mount $BOOT_PART mnt/boot
 
