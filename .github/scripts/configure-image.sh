@@ -126,23 +126,36 @@ log_display ""
 log_display "  [1/4] Vérification de la connexion réseau..."
 sleep 2
 
-# Check for Ethernet connection first
-if ! ip link | grep -q "eth0.*state UP"; then
-    log_display "  ⚠️  Aucune connexion Ethernet (eth0) détectée."
+# Check for network connection (Ethernet OR WiFi)
+NETWORK_CONNECTED=false
+
+if ip link show eth0 2>/dev/null | grep -q "state UP"; then
+    log_display "  ✓ Connexion Ethernet (eth0) détectée"
+    NETWORK_CONNECTED=true
+elif ip link show wlan0 2>/dev/null | grep -q "state UP"; then
+    log_display "  ✓ Connexion WiFi (wlan0) détectée"
+    NETWORK_CONNECTED=true
+fi
+
+if [ "$NETWORK_CONNECTED" = false ]; then
+    log_display "  ⚠️  Aucune connexion réseau détectée."
     log_display ""
-    log_display "  Veuillez brancher un câble Ethernet et redémarrer."
+    log_display "  Veuillez connecter un câble Ethernet ou configurer le WiFi,"
+    log_display "  puis redémarrer le système."
+    log_display ""
+    log_display "  💡 Pour configurer le WiFi, éditez le fichier :"
+    log_display "     /etc/wpa_supplicant/wpa_supplicant.conf"
     systemctl disable runtipi-installer.service
-    sleep 10
+    sleep 15
     exit 0
 fi
 
-log_display "  ✓ Connexion Ethernet détectée"
 log_display ""
 log_display "  [2/4] Attente de la connexion Internet..."
 
 # Wait for internet connection (max 5 minutes)
 for i in {1..60}; do
-  if ping -c 1 -W 2 8.8.8.8 &> /dev/null; then
+  if curl -fs --head http://connectivity-check.ubuntu.com/ >/dev/null 2>&1; then
     log_display "  ✓ Connexion Internet établie"
     log_display ""
     log_display "  [3/4] Téléchargement et installation de Runtipi..."
@@ -182,6 +195,10 @@ EOMOTD
       chmod +x /etc/profile.d/runtipi-motd.sh
       # Clear the static MOTD file
       > /etc/motd
+      
+      # Create marker file to indicate successful installation
+      mkdir -p /var/lib
+      echo "Runtipi installed on $(date)" > /var/lib/runtipi-installed
       
       clear
       log_display ""
