@@ -56,22 +56,13 @@ echo "$DEFAULT_USER:$PASSWORD_HASH" | sudo tee "$BOOT_MOUNT/userconf.txt" > /dev
 echo "Enabling SSH"
 sudo touch "$BOOT_MOUNT/ssh"
 
-# Disable cloud-init messages on boot for a cleaner experience
-echo "Disabling cloud-init verbose messages"
+# Disable cloud-init network messages but keep it functional
+echo "Configuring cloud-init for cleaner boot"
 sudo mkdir -p "$ROOT_MOUNT/etc/cloud/cloud.cfg.d"
-sudo tee "$ROOT_MOUNT/etc/cloud/cloud.cfg.d/99-disable-network-messages.cfg" > /dev/null <<EOF
-# Disable verbose cloud-init messages on console
-datasource_list: [ None ]
+sudo tee "$ROOT_MOUNT/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" > /dev/null <<EOF
+# Disable cloud-init network configuration
+network: {config: disabled}
 EOF
-
-# Add a Plymouth boot splash theme configuration (if plymouth is available)
-# This will hide boot messages behind a graphical splash screen
-echo "Configuring quiet boot"
-if [ -f "$ROOT_MOUNT/boot/firmware/cmdline.txt" ]; then
-  sudo sed -i 's/$/ quiet splash plymouth.ignore-serial-consoles loglevel=3/' "$ROOT_MOUNT/boot/firmware/cmdline.txt"
-elif [ -f "$ROOT_MOUNT/boot/cmdline.txt" ]; then
-  sudo sed -i 's/$/ quiet splash plymouth.ignore-serial-consoles loglevel=3/' "$ROOT_MOUNT/boot/cmdline.txt"
-fi
 
 echo "--- (3/4) Setting up first-boot services ---"
 # Create a first-boot script to run locale-gen
@@ -108,66 +99,81 @@ if [ "$RUNTIPI_AUTO_INSTALL" = "True" ]; then
     echo "--- (4/4) Setting up Runtipi auto-installation ---"
 
     # Create the installer script that will run on the Pi
-    sudo tee "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh" > /dev/null <<EOF
+    sudo tee "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh" > /dev/null <<'EOF'
 #!/bin/bash
 # This script runs on boot to install Runtipi if network is available.
 
+# Ensure we output to the main console
+exec > /dev/tty1 2>&1 < /dev/tty1
+
 LOG_FILE="/var/log/runtipi-installer.log"
-exec > >(tee -a "\$LOG_FILE") 2>&1
+
+# Function to log and display
+log_display() {
+    echo "$1" | tee -a "$LOG_FILE"
+}
 
 clear
-echo ""
-echo "  ╔═══════════════════════════════════════════════════════════╗"
-echo "  ║                                                           ║"
-echo "  ║        🚀  RuntipiOS - Installation automatique  🚀       ║"
-echo "  ║                                                           ║"
-echo "  ╚═══════════════════════════════════════════════════════════╝"
-echo ""
-echo "  [1/4] Vérification de la connexion réseau..."
+log_display ""
+log_display "  ╔═══════════════════════════════════════════════════════════╗"
+log_display "  ║                                                           ║"
+log_display "  ║        🚀  RuntipiOS - Installation automatique  🚀       ║"
+log_display "  ║                                                           ║"
+log_display "  ╚═══════════════════════════════════════════════════════════╝"
+log_display ""
+log_display "  [1/4] Vérification de la connexion réseau..."
+sleep 2
 
 # Check for Ethernet connection first
 if ! ip link | grep -q "eth0.*state UP"; then
-    echo "  ⚠️  Aucune connexion Ethernet (eth0) détectée."
-    echo ""
-    echo "  Veuillez brancher un câble Ethernet et redémarrer."
+    log_display "  ⚠️  Aucune connexion Ethernet (eth0) détectée."
+    log_display ""
+    log_display "  Veuillez brancher un câble Ethernet et redémarrer."
     systemctl disable runtipi-installer.service
+    sleep 10
     exit 0
 fi
 
-echo "  ✓ Connexion Ethernet détectée"
-echo ""
-echo "  [2/4] Attente de la connexion Internet..."
+log_display "  ✓ Connexion Ethernet détectée"
+log_display ""
+log_display "  [2/4] Attente de la connexion Internet..."
 
 # Wait for internet connection (max 5 minutes)
 for i in {1..60}; do
-  if ping -c 1 8.8.8.8 &> /dev/null; then
-    echo "  ✓ Connexion Internet établie"
-    echo ""
-    echo "  [3/4] Téléchargement et installation de Runtipi..."
-    echo "  (Cela peut prendre 5-10 minutes selon votre connexion)"
-    echo ""
+  if ping -c 1 -W 2 8.8.8.8 &> /dev/null; then
+    log_display "  ✓ Connexion Internet établie"
+    log_display ""
+    log_display "  [3/4] Téléchargement et installation de Runtipi..."
+    log_display "  (Cela peut prendre 5-10 minutes selon votre connexion)"
+    log_display ""
     
-    if curl -fsSL "$RUNTIPI_URL" | bash; then
-      echo ""
-      echo "  [4/4] Configuration finale..."
+EOF
+
+    # Now add the curl command with the actual URL
+    echo "    if curl -fsSL \"$RUNTIPI_URL\" | bash 2>&1 | tee -a \"\$LOG_FILE\"; then" | sudo tee -a "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh" > /dev/null
+
+    # Continue with the rest of the script
+    sudo tee -a "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh" > /dev/null <<'EOF'
+      log_display ""
+      log_display "  [4/4] Configuration finale..."
       # Create dynamic MOTD script
       cat > /etc/profile.d/runtipi-motd.sh << 'EOMOTD'
 #!/bin/bash
-IP_ADDRESS=\$(hostname -I | awk '{print \$1}')
+IP_ADDRESS=$(hostname -I | awk '{print $1}')
 cat << EOT
 
   ____              _   _       _     ___  ____  
- |  _ \\ _   _ _ __ | |_(_)_ __ (_)   / _ \\/ ___| 
- | |_) | | | | '_ \\| __| | '_ \\| |  | | | \\___ \\ 
+ |  _ \ _   _ _ __ | |_(_)_ __ (_)   / _ \/ ___| 
+ | |_) | | | | '_ \| __| | '_ \| |  | | | \___ \ 
  |  _ <| |_| | | | | |_| | |_) | |  | |_| |___) |
- |_| \\_\\\\__,_|_| |_|\\__|_| .__/|_|   \\___/|____/ 
+ |_| \_\\__,_|_| |_|\__|_| .__/|_|   \___/|____/ 
                          |_|                      
 
-Welcome to RuntipiOS - Simplified Runtipi Deployment
+Bienvenue sur RuntipiOS - Déploiement simplifié de Runtipi
 
-Quick Start:
-  - Web Interface: http://runtipios.local or http://\$IP_ADDRESS
-  - Documentation: https://runtipi.io
+Accès rapide :
+  - Interface Web : http://runtipios.local ou http://$IP_ADDRESS
+  - Documentation : https://runtipi.io
 
 EOT
 EOMOTD
@@ -175,25 +181,28 @@ EOMOTD
       # Clear the static MOTD file
       > /etc/motd
       
-      echo ""
-      echo "  ╔═══════════════════════════════════════════════════════════╗"
-      echo "  ║                                                           ║"
-      echo "  ║        ✅  Installation terminée avec succès !  ✅        ║"
-      echo "  ║                                                           ║"
-      echo "  ║   Runtipi est maintenant accessible à l'adresse :        ║"
-      echo "  ║                                                           ║"
-      echo "  ║   👉  http://runtipios.local                             ║"
-      echo "  ║                                                           ║"
-      echo "  ║   Le système va redémarrer dans 10 secondes...           ║"
-      echo "  ║                                                           ║"
-      echo "  ╚═══════════════════════════════════════════════════════════╝"
-      echo ""
+      clear
+      log_display ""
+      log_display "  ╔═══════════════════════════════════════════════════════════╗"
+      log_display "  ║                                                           ║"
+      log_display "  ║        ✅  Installation terminée avec succès !  ✅       ║"
+      log_display "  ║                                                           ║"
+      log_display "  ║   Runtipi est maintenant accessible à l'adresse :         ║"
+      log_display "  ║                                                           ║"
+      log_display "  ║             👉 http://runtipios.local 👈​                 ║"
+      log_display "  ║                                                           ║"
+      log_display "  ║   Le système va redémarrer dans 15 secondes...            ║"
+      log_display "  ║                                                           ║"
+      log_display "  ╚═══════════════════════════════════════════════════════════╝"
+      log_display ""
       
-      sleep 10
+      sleep 15
     else
-      echo ""
-      echo "  ❌ L'installation de Runtipi a échoué."
-      echo "  📋 Consultez le fichier de log : /var/log/runtipi-installer.log"
+      log_display ""
+      log_display "  ❌ L'installation de Runtipi a échoué."
+      log_display "  📋 Consultez le fichier de log : /var/log/runtipi-installer.log"
+      log_display ""
+      sleep 30
     fi
     
     # Disable this service from running again
@@ -202,15 +211,16 @@ EOMOTD
     reboot
     exit 0
   fi
-  printf "  ⏳ Tentative %d/60...\r" "\$i"
+  printf "  ⏳ Tentative %d/60...\r" "$i"
   sleep 5
 done
 
-echo ""
-echo "  ❌ Impossible d'établir une connexion Internet après 5 minutes."
-echo "  Veuillez vérifier votre connexion réseau et redémarrer."
+log_display ""
+log_display "  ❌ Impossible d'établir une connexion Internet après 5 minutes."
+log_display "  Veuillez vérifier votre connexion réseau et redémarrer."
 systemctl disable runtipi-installer.service
 rm -f /etc/systemd/system/runtipi-installer.service
+sleep 30
 exit 1
 EOF
     sudo chmod +x "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh"
@@ -219,16 +229,18 @@ EOF
     sudo tee "$ROOT_MOUNT/etc/systemd/system/runtipi-installer.service" > /dev/null <<'EOF'
 [Unit]
 Description=Runtipi Auto Installer
-After=network-online.target runtipios-firstboot.service
+After=network-online.target runtipios-firstboot.service cloud-final.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=idle
 ExecStart=/usr/local/bin/runtipi-installer.sh
-StandardInput=tty
-StandardOutput=tty
-StandardError=journal
-RemainAfterExit=yes
+StandardInput=tty-force
+StandardOutput=inherit
+StandardError=inherit
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
 
 [Install]
 WantedBy=multi-user.target
