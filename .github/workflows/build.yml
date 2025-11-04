@@ -34,6 +34,7 @@ jobs:
           raspios_url = config['raspios']['url']
           image_name = raspios_url.split('/')[-1]
 
+          env_file = os.getenv('GITHUB_ENV')
           with open(env_file, 'a') as f:
               f.write(f\"RASPIOS_IMAGE_URL={raspios_url}\n\")
               f.write(f\"RASPIOS_IMAGE_NAME={image_name}\n\")
