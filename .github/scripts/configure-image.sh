@@ -42,15 +42,74 @@ XKBOPTIONS=""
 BACKSPACE="guess"
 EOF
 
-# 5. Set WiFi country
+# 5. Set WiFi country (CRITICAL for rfkill unlock)
 echo "Setting WiFi country to $WIFI_COUNTRY"
-echo "country=$WIFI_COUNTRY" | sudo tee -a "$ROOT_MOUNT/etc/wpa_supplicant/wpa_supplicant.conf" > /dev/null
+# Configure in wpa_supplicant
+echo "country=$WIFI_COUNTRY" | sudo tee "$ROOT_MOUNT/etc/wpa_supplicant/wpa_supplicant.conf" > /dev/null
+# Also set regulatory domain via iw (prevents rfkill soft block)
+echo "REGDOMAIN=$WIFI_COUNTRY" | sudo tee -a "$ROOT_MOUNT/etc/default/crda" > /dev/null
+# Create a service to set regulatory domain early
+sudo tee "$ROOT_MOUNT/etc/systemd/system/set-wifi-region.service" > /dev/null <<EOF
+[Unit]
+Description=Set WiFi regulatory domain
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/iw reg set $WIFI_COUNTRY
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
+EOF
+sudo ln -sf /etc/systemd/system/set-wifi-region.service "$ROOT_MOUNT/etc/systemd/system/sysinit.target.wants/set-wifi-region.service"
 
 echo "--- (2/4) Setting up user and enabling SSH ---"
-# Create userconf.txt for headless setup
+# Create userconf.txt for headless setup (used by systemd-firstboot)
 echo "Creating userconf.txt for user $DEFAULT_USER"
 PASSWORD_HASH=$(echo "$DEFAULT_PASSWORD" | openssl passwd -6 -stdin)
 echo "$DEFAULT_USER:$PASSWORD_HASH" | sudo tee "$BOOT_MOUNT/userconf.txt" > /dev/null
+
+# ALSO create the user directly in the image to avoid firstboot issues
+echo "Creating user $DEFAULT_USER in /etc/passwd and /etc/shadow"
+# Check if user doesn't already exist
+if ! sudo grep -q "^$DEFAULT_USER:" "$ROOT_MOUNT/etc/passwd"; then
+    # Get next available UID (typically 1000)
+    NEXT_UID=$(sudo awk -F: '$3 >= 1000 && $3 < 60000 {print $3}' "$ROOT_MOUNT/etc/passwd" | sort -n | tail -1)
+    NEXT_UID=$((NEXT_UID + 1))
+    if [ -z "$NEXT_UID" ] || [ "$NEXT_UID" -lt 1000 ]; then
+        NEXT_UID=1000
+    fi
+    
+    # Add user to passwd
+    echo "$DEFAULT_USER:x:$NEXT_UID:$NEXT_UID::/home/$DEFAULT_USER:/bin/bash" | sudo tee -a "$ROOT_MOUNT/etc/passwd" > /dev/null
+    # Add group
+    echo "$DEFAULT_USER:x:$NEXT_UID:" | sudo tee -a "$ROOT_MOUNT/etc/group" > /dev/null
+    # Add user to shadow with hashed password
+    echo "$DEFAULT_USER:$PASSWORD_HASH:19000:0:99999:7:::" | sudo tee -a "$ROOT_MOUNT/etc/shadow" > /dev/null
+    # Add user to important groups
+    sudo sed -i "s/^\(sudo:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(adm:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(dialout:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(cdrom:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(audio:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(video:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(plugdev:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(users:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(netdev:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(input:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
+    sudo sed -i "s/^\(spi:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
+    sudo sed -i "s/^\(i2c:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
+    sudo sed -i "s/^\(gpio:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
+    
+    # Create home directory
+    sudo mkdir -p "$ROOT_MOUNT/home/$DEFAULT_USER"
+    # Copy skel files
+    sudo cp -r "$ROOT_MOUNT/etc/skel/." "$ROOT_MOUNT/home/$DEFAULT_USER/" 2>/dev/null || true
+    # Set ownership (will be corrected on first boot, but set UID:GID)
+    sudo chown -R $NEXT_UID:$NEXT_UID "$ROOT_MOUNT/home/$DEFAULT_USER"
+fi
 
 # Enable SSH by creating the 'ssh' file
 echo "Enabling SSH"
@@ -105,6 +164,10 @@ if [ "$RUNTIPI_AUTO_INSTALL" = "True" ]; then
 #!/bin/bash
 # This script runs on boot to install Runtipi if network is available.
 
+# Create marker file to prevent getty from starting
+mkdir -p /var/lib
+touch /var/lib/runtipi-installing
+
 # Ensure we output to the main console
 exec > /dev/tty1 2>&1 < /dev/tty1
 
@@ -119,7 +182,7 @@ clear
 log_display ""
 log_display "  ╔═══════════════════════════════════════════════════════════╗"
 log_display "  ║                                                           ║"
-log_display "  ║        🚀  RuntipiOS - Installation automatique  🚀       ║"
+log_display "  ║        🚀  RuntipiOS - Installation automatique  🚀      ║"
 log_display "  ║                                                           ║"
 log_display "  ╚═══════════════════════════════════════════════════════════╝"
 log_display ""
@@ -145,6 +208,9 @@ if [ "$NETWORK_CONNECTED" = false ]; then
     log_display ""
     log_display "  💡 Pour configurer le WiFi, éditez le fichier :"
     log_display "     /etc/wpa_supplicant/wpa_supplicant.conf"
+    
+    # Remove installing marker so getty can start
+    rm -f /var/lib/runtipi-installing
     systemctl disable runtipi-installer.service
     sleep 15
     exit 0
@@ -171,34 +237,33 @@ EOF
     sudo tee -a "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh" > /dev/null <<'EOF'
       log_display ""
       log_display "  [4/4] Configuration finale..."
-      # Create dynamic MOTD script
-      cat > /etc/profile.d/runtipi-motd.sh << 'EOMOTD'
-#!/bin/bash
-IP_ADDRESS=$(hostname -I | awk '{print $1}')
-cat << EOT
-
-  ____              _   _       _     ___  ____  
- |  _ \ _   _ _ __ | |_(_)_ __ (_)   / _ \/ ___| 
- | |_) | | | | '_ \| __| | '_ \| |  | | | \___ \ 
- |  _ <| |_| | | | | |_| | |_) | |  | |_| |___) |
- |_| \_\\__,_|_| |_|\__|_| .__/|_|   \___/|____/ 
-                         |_|                      
-
-Bienvenue sur RuntipiOS - Déploiement simplifié de Runtipi
-
-Accès rapide :
-  - Interface Web : http://runtipios.local ou http://$IP_ADDRESS
-  - Documentation : https://runtipi.io
-
-EOT
-EOMOTD
-      chmod +x /etc/profile.d/runtipi-motd.sh
-      # Clear the static MOTD file
-      > /etc/motd
       
-      # Create marker file to indicate successful installation
+      # Remove installing marker and create installed marker
+      rm -f /var/lib/runtipi-installing
       mkdir -p /var/lib
       echo "Runtipi installed on $(date)" > /var/lib/runtipi-installed
+      
+      # Create custom MOTD that will display on login
+      cat > /etc/motd << 'EOMOTD'
+
+  ╔═══════════════════════════════════════════════════════════╗
+  ║                                                           ║
+  ║        ✅  RuntipiOS - Installation réussie !  ✅        ║
+  ║                                                           ║
+  ╚═══════════════════════════════════════════════════════════╝
+
+  Runtipi est maintenant installé et prêt à l'emploi !
+
+  🌐 Accès à l'interface Web :
+     • http://runtipios.local
+     • http://$(hostname -I | awk '{print $1}')
+
+  📚 Documentation : https://runtipi.io
+  💬 Support : https://github.com/runtipi/runtipi
+
+  Bon déploiement ! 🚀
+
+EOMOTD
       
       clear
       log_display ""
@@ -221,6 +286,9 @@ EOMOTD
       log_display "  ❌ L'installation de Runtipi a échoué."
       log_display "  📋 Consultez le fichier de log : /var/log/runtipi-installer.log"
       log_display ""
+      
+      # Remove installing marker so getty can start
+      rm -f /var/lib/runtipi-installing
       sleep 30
     fi
     
@@ -237,6 +305,9 @@ done
 log_display ""
 log_display "  ❌ Impossible d'établir une connexion Internet après 5 minutes."
 log_display "  Veuillez vérifier votre connexion réseau et redémarrer."
+
+# Remove installing marker so getty can start
+rm -f /var/lib/runtipi-installing
 systemctl disable runtipi-installer.service
 rm -f /etc/systemd/system/runtipi-installer.service
 sleep 30
@@ -276,15 +347,44 @@ EOF
     echo "Enabling runtipi-installer service"
     sudo ln -sf /etc/systemd/system/runtipi-installer.service "$ROOT_MOUNT/etc/systemd/system/multi-user.target.wants/runtipi-installer.service"
 
-    # Disable getty on tty1 temporarily to avoid conflicts during installation
-    echo "Configuring getty@tty1 to not interfere with installation"
+    # Configure getty@tty1 behavior during and after installation
+    echo "Configuring getty@tty1 for installation and post-install"
     sudo mkdir -p "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d"
-    sudo tee "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null <<'EOF'
+    
+    # Create the override that handles both installation phase and autologin
+    if [ "$AUTOLOGIN" = "True" ]; then
+        # Autologin enabled: block getty during install, then auto-login after
+        sudo tee "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null <<EOF
 [Unit]
-ConditionPathExists=!/var/lib/runtipi-installed
+# Don't start getty during Runtipi installation
+ConditionPathExists=!/var/lib/runtipi-installing
+
+[Service]
+# After installation, auto-login
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $DEFAULT_USER --noclear %I \\\$TERM
 EOF
+    else
+        # Autologin disabled: block getty during install only
+        sudo tee "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null <<'EOF'
+[Unit]
+# Don't start getty during Runtipi installation
+ConditionPathExists=!/var/lib/runtipi-installing
+EOF
+    fi
 else
     echo "--- (4/4) Skipping Runtipi auto-installation ---"
+    
+    # Even without Runtipi, configure autologin if requested
+    if [ "$AUTOLOGIN" = "True" ]; then
+        echo "Configuring autologin for $DEFAULT_USER on tty1"
+        sudo mkdir -p "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d"
+        sudo tee "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $DEFAULT_USER --noclear %I \\\$TERM
+EOF
+    fi
 fi
 
 echo "--- Configuration script finished successfully! ---"

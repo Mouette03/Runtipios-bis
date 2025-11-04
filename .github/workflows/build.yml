@@ -34,7 +34,6 @@ jobs:
           raspios_url = config['raspios']['url']
           image_name = raspios_url.split('/')[-1]
 
-          env_file = os.getenv('GITHUB_ENV')
           with open(env_file, 'a') as f:
               f.write(f\"RASPIOS_IMAGE_URL={raspios_url}\n\")
               f.write(f\"RASPIOS_IMAGE_NAME={image_name}\n\")
@@ -45,6 +44,8 @@ jobs:
               f.write(f\"WIFI_COUNTRY={config['system']['wifi_country']}\n\")
               f.write(f\"DEFAULT_USER={config['system']['default_user']}\n\")
               f.write(f\"DEFAULT_PASSWORD={config['system']['default_password']}\n\")
+              f.write(f\"AUTOLOGIN={config['system'].get('autologin', True)}\n\")
+              f.write(f\"SHOW_MOTD={config['system'].get('show_motd', True)}\n\")
               f.write(f\"IMAGE_SIZE={config['build']['image_size']}\n\")
               f.write(f\"COMPRESSION_FORMAT={config['build']['compression_format']}\n\")
               f.write(f\"RUNTIPI_AUTO_INSTALL={config['runtipi']['auto_install']}\n\")
@@ -138,6 +139,8 @@ jobs:
           WIFI_COUNTRY: ${{ env.WIFI_COUNTRY }}
           DEFAULT_USER: ${{ env.DEFAULT_USER }}
           DEFAULT_PASSWORD: ${{ env.DEFAULT_PASSWORD }}
+          AUTOLOGIN: ${{ env.AUTOLOGIN }}
+          SHOW_MOTD: ${{ env.SHOW_MOTD }}
           RUNTIPI_AUTO_INSTALL: ${{ env.RUNTIPI_AUTO_INSTALL }}
           RUNTIPI_URL: ${{ env.RUNTIPI_URL }}
         run: |
