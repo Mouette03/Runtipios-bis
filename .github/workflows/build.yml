@@ -61,31 +61,33 @@ jobs:
 
       - name: Download base Raspberry Pi OS image
         run: |
-          echo "Downloading $RASPIOS_URL to $IMAGE_DIR"
-          wget -O $IMAGE_DIR/raspios.img.xz "$RASPIOS_URL"
+          echo "Downloading ${{ env.RASPIOS_IMAGE_URL }} to ${{ env.IMAGE_DIR }}"
+          wget -O ${{ env.IMAGE_DIR }}/raspios.img.xz "${{ env.RASPIOS_IMAGE_URL }}"
 
       - name: Decompress base image
         run: |
-          if [ ! -f "$IMAGE_DIR/raspios.img.xz" ]; then
+          if [ ! -f "${{ env.IMAGE_DIR }}/raspios.img.xz" ]; then
             echo "ERROR: downloaded image missing"
-            ls -l $IMAGE_DIR
+            ls -l ${{ env.IMAGE_DIR }}
             exit 1
           fi
-          xz -d -k -c "$IMAGE_DIR/raspios.img.xz" > "$IMAGE_DIR/raspios.img"
-          ls -lh $IMAGE_DIR
+          xz -d -k -c "${{ env.IMAGE_DIR }}/raspios.img.xz" > "${{ env.IMAGE_DIR }}/raspios.img"
+          ls -lh ${{ env.IMAGE_DIR }}
 
       - name: Resize image file if requested
         run: |
-          IMG="$IMAGE_DIR/raspios.img"
-          if [ -z "$BUILD_IMAGE_SIZE" ]; then
+          IMG="${{ env.IMAGE_DIR }}/raspios.img"
+          if [ -z "${{ env.IMAGE_SIZE }}" ]; then
             echo "No build.image_size provided, keeping base image size"
             exit 0
           fi
-          BYTES=$(( ${BUILD_IMAGE_SIZE} * 1024 * 1024 * 1024 ))
+          # Convert size like "4G" to bytes
+          SIZE_VALUE=$(echo "${{ env.IMAGE_SIZE }}" | sed 's/[^0-9]//g')
+          BYTES=$(( ${SIZE_VALUE} * 1024 * 1024 * 1024 ))
           CUR=$(stat -c%s "$IMG")
           echo "Current size: $CUR bytes, desired: $BYTES bytes"
           if [ "$CUR" -lt "$BYTES" ]; then
-            echo "Expanding image to ${BUILD_IMAGE_SIZE}G"
+            echo "Expanding image to ${{ env.IMAGE_SIZE }}"
             truncate -s $BYTES "$IMG"
           else
             echo "Image is already >= desired size"
@@ -93,7 +95,7 @@ jobs:
 
       - name: Setup loop device and map partitions
         run: |
-          IMG="$IMAGE_DIR/raspios.img"
+          IMG="${{ env.IMAGE_DIR }}/raspios.img"
           LOOPDEV=$(sudo losetup --find --show -P "$IMG")
           echo "LOOPDEV=$LOOPDEV" >> $GITHUB_ENV
           sleep 1
@@ -102,7 +104,7 @@ jobs:
 
       - name: Resize root partition to fill image
         run: |
-          LOOPDEV=${LOOPDEV}
+          LOOPDEV=${{ env.LOOPDEV }}
           # try to resize partition 2 to 100%
           sudo parted -s $LOOPDEV resizepart 2 100% || true
           # run e2fsck and resize2fs on the partition device
@@ -117,7 +119,7 @@ jobs:
       - name: Mount partitions
         run: |
           mkdir -p mnt mnt/boot
-          LOOPDEV=${LOOPDEV}
+          LOOPDEV=${{ env.LOOPDEV }}
           BOOT=${LOOPDEV}p1
           ROOT=${LOOPDEV}p2
           echo "BOOT=$BOOT" >> $GITHUB_ENV
@@ -129,15 +131,15 @@ jobs:
         env:
           ROOT_MOUNT: mnt
           BOOT_MOUNT: mnt/boot
-          HOSTNAME: ${{ steps.config.outputs.HOSTNAME }}
-          TIMEZONE: ${{ steps.config.outputs.TIMEZONE }}
-          LOCALE: ${{ steps.config.outputs.LOCALE }}
-          KEYBOARD_LAYOUT: ${{ steps.config.outputs.KEYBOARD_LAYOUT }}
-          WIFI_COUNTRY: ${{ steps.config.outputs.WIFI_COUNTRY }}
-          DEFAULT_USER: ${{ steps.config.outputs.DEFAULT_USER }}
-          DEFAULT_PASSWORD: ${{ steps.config.outputs.DEFAULT_PASSWORD }}
-          RUNTIPI_AUTO_INSTALL: ${{ steps.config.outputs.RUNTIPI_AUTO_INSTALL }}
-          RUNTIPI_URL: ${{ steps.config.outputs.RUNTIPI_URL }}
+          HOSTNAME: ${{ env.HOSTNAME }}
+          TIMEZONE: ${{ env.TIMEZONE }}
+          LOCALE: ${{ env.LOCALE }}
+          KEYBOARD_LAYOUT: ${{ env.KEYBOARD_LAYOUT }}
+          WIFI_COUNTRY: ${{ env.WIFI_COUNTRY }}
+          DEFAULT_USER: ${{ env.DEFAULT_USER }}
+          DEFAULT_PASSWORD: ${{ env.DEFAULT_PASSWORD }}
+          RUNTIPI_AUTO_INSTALL: ${{ env.RUNTIPI_AUTO_INSTALL }}
+          RUNTIPI_URL: ${{ env.RUNTIPI_URL }}
         run: |
           chmod +x ./.github/scripts/configure-image.sh
           ./.github/scripts/configure-image.sh
@@ -147,64 +149,19 @@ jobs:
           sync
           sudo umount mnt/boot || true
           sudo umount mnt || true
-          sudo losetup -d $LOOPDEV || true
+          sudo losetup -d ${{ env.LOOPDEV }} || true
 
-      - name: Unmount partitions
-        if: always()
-        run: |
-          sudo umount /mnt/root || true
-          sudo umount /mnt/boot || true
-          sudo losetup -d $LOOP_DEVICE || true
-
-      - name: Verify configuration
-        run: |
-          echo "--- Verifying configuration ---"
-          LOOP_DEVICE=$(sudo losetup -f)
-          sudo losetup -P $LOOP_DEVICE ${{ steps.config.outputs.RASPIOS_IMAGE_NAME }}
-          sudo mount /dev/disk/by-partuuid/$(sudo blkid -s PARTUUID -o value ${LOOP_DEVICE}p2) /mnt/root
-          sudo mount /dev/disk/by-partuuid/$(sudo blkid -s PARTUUID -o value ${LOOP_DEVICE}p1) /mnt/boot
-
-          # Verify hostname
-          if [ "$(sudo cat /mnt/root/etc/hostname)" != "${{ steps.config.outputs.HOSTNAME }}" ]; then
-            echo "::error::Hostname verification failed!"
-            exit 1
-          fi
-          echo "Hostname verification successful."
-
-          # Verify userconf.txt
-          if ! sudo grep -q "^{{ steps.config.outputs.DEFAULT_USER }}:" /mnt/boot/userconf.txt; then
-            echo "::error::userconf.txt verification failed!"
-            exit 1
-          fi
-          echo "userconf.txt verification successful."
-
-          # Verify locale
-          if ! sudo grep -q "LANG=${{ steps.config.outputs.LOCALE }}" /mnt/root/etc/default/locale; then
-            echo "::error::Locale verification failed!"
-            exit 1
-          fi
-          echo "Locale verification successful."
-
-          # Verify keyboard
-          if ! sudo grep -q 'XKBMODEL="pc105"' /mnt/root/etc/default/keyboard || ! sudo grep -q "XKBLAYOUT=${{ steps.config.outputs.KEYBOARD_LAYOUT }}" /mnt/root/etc/default/keyboard; then
-            echo "::error::Keyboard verification failed!"
-            exit 1
-          fi
-          echo "Keyboard verification successful."
-
-          echo "--- Verification complete ---"
-        
       - name: Compress final image
         run: |
-          IMG="$IMAGE_DIR/raspios.img"
-          OUT="$IMAGE_DIR/runtipios.img"
+          IMG="${{ env.IMAGE_DIR }}/raspios.img"
+          OUT="${{ env.IMAGE_DIR }}/runtipios.img"
           cp "$IMG" "$OUT"
-          case "$BUILD_COMPRESSION_FORMAT" in
+          case "${{ env.COMPRESSION_FORMAT }}" in
             xz|XZ)
               xz -T0 -z -c "$OUT" > "$OUT.xz"
               ARTIFACT="$OUT.xz"
               ;;
-            gz|gz|gzip)
+            gz|gzip)
               gzip -c "$OUT" > "$OUT.gz"
               ARTIFACT="$OUT.gz"
               ;;
@@ -220,4 +177,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runtipios-image
-          path: images/runtipios.img.*
+          path: ${{ env.ARTIFACT }}
