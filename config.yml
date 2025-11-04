@@ -19,9 +19,9 @@ system:
 runtipi:
   auto_install: true
 
-wifi_connect:
-  version: "1.0"
+wifi:
   ssid: "RuntipiOS-Setup"
+  password: "runtipi123"  # Set to empty "" for open network (no password)
 
 build:
   image_size: 4
