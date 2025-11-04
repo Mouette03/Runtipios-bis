@@ -56,13 +56,15 @@ echo "$DEFAULT_USER:$PASSWORD_HASH" | sudo tee "$BOOT_MOUNT/userconf.txt" > /dev
 echo "Enabling SSH"
 sudo touch "$BOOT_MOUNT/ssh"
 
-# Disable cloud-init network messages but keep it functional
-echo "Configuring cloud-init for cleaner boot"
-sudo mkdir -p "$ROOT_MOUNT/etc/cloud/cloud.cfg.d"
-sudo tee "$ROOT_MOUNT/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" > /dev/null <<EOF
-# Disable cloud-init network configuration
-network: {config: disabled}
-EOF
+# DISABLE cloud-init completely to avoid console spam
+echo "Disabling cloud-init for cleaner boot experience"
+sudo touch "$BOOT_MOUNT/cloud-init.disabled"
+
+# Also disable cloud-init services in systemd
+sudo mkdir -p "$ROOT_MOUNT/etc/systemd/system/cloud-init.target.wants"
+for service in cloud-config.service cloud-final.service cloud-init-local.service cloud-init.service; do
+    sudo ln -sf /dev/null "$ROOT_MOUNT/etc/systemd/system/$service"
+done
 
 echo "--- (3/4) Setting up first-boot services ---"
 # Create a first-boot script to run locale-gen
@@ -225,28 +227,45 @@ exit 1
 EOF
     sudo chmod +x "$ROOT_MOUNT/usr/local/bin/runtipi-installer.sh"
 
-    # Create systemd service for the installer
+    # Create the systemd service
+    echo "Creating runtipi-installer systemd service"
     sudo tee "$ROOT_MOUNT/etc/systemd/system/runtipi-installer.service" > /dev/null <<'EOF'
 [Unit]
-Description=Runtipi Auto Installer
-After=network-online.target runtipios-firstboot.service cloud-final.service
+Description=Runtipi Auto-Installer
+After=network-online.target systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
 Wants=network-online.target
+Before=getty@tty1.service
 
 [Service]
 Type=idle
+ExecStartPre=/bin/sleep 3
 ExecStart=/usr/local/bin/runtipi-installer.sh
-StandardInput=tty-force
-StandardOutput=inherit
-StandardError=inherit
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
 TTYPath=/dev/tty1
 TTYReset=yes
 TTYVHangup=yes
+TTYVTDisallocate=yes
+RemainAfterExit=no
+KillMode=process
+Restart=no
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
     # Enable the service
+    echo "Enabling runtipi-installer service"
     sudo ln -sf /etc/systemd/system/runtipi-installer.service "$ROOT_MOUNT/etc/systemd/system/multi-user.target.wants/runtipi-installer.service"
+
+    # Disable getty on tty1 temporarily to avoid conflicts during installation
+    echo "Configuring getty@tty1 to not interfere with installation"
+    sudo mkdir -p "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d"
+    sudo tee "$ROOT_MOUNT/etc/systemd/system/getty@tty1.service.d/override.conf" > /dev/null <<'EOF'
+[Unit]
+ConditionPathExists=!/var/lib/runtipi-installed
+EOF
 else
     echo "--- (4/4) Skipping Runtipi auto-installation ---"
 fi
