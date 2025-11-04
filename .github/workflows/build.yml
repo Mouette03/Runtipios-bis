@@ -1,6 +1,10 @@
 name: Build RuntipiOS Image
 
 on:
+  # Allows manual triggering from the Actions tab
+  workflow_dispatch:
+
+  # Triggers on new release creation
   release:
     types: [created]
 
