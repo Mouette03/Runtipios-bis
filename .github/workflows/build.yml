@@ -121,176 +121,22 @@ jobs:
           sudo mount $ROOT mnt
           sudo mount $BOOT mnt/boot
 
-      - name: Apply basic system configuration
+      - name: Apply configuration using external script
+        env:
+          ROOT_MOUNT: mnt
+          BOOT_MOUNT: mnt/boot
+          HOSTNAME: ${{ steps.config.outputs.HOSTNAME }}
+          TIMEZONE: ${{ steps.config.outputs.TIMEZONE }}
+          LOCALE: ${{ steps.config.outputs.LOCALE }}
+          KEYBOARD_LAYOUT: ${{ steps.config.outputs.KEYBOARD_LAYOUT }}
+          WIFI_COUNTRY: ${{ steps.config.outputs.WIFI_COUNTRY }}
+          DEFAULT_USER: ${{ steps.config.outputs.DEFAULT_USER }}
+          DEFAULT_PASSWORD: ${{ steps.config.outputs.DEFAULT_PASSWORD }}
+          RUNTIPI_AUTO_INSTALL: ${{ steps.config.outputs.RUNTIPI_AUTO_INSTALL }}
+          RUNTIPI_URL: ${{ steps.config.outputs.RUNTIPI_URL }}
         run: |
-          set -e
-          # Hostname
-          if [ -n "$SYSTEM_HOSTNAME" ]; then
-            echo "$SYSTEM_HOSTNAME" | sudo tee mnt/etc/hostname
-            sudo sed -i '1s/.*/127.0.1.1\t'$SYSTEM_HOSTNAME'/' mnt/etc/hosts || true
-          fi
-          # Timezone
-          if [ -n "$SYSTEM_TIMEZONE" ]; then
-            sudo ln -sf /usr/share/zoneinfo/$SYSTEM_TIMEZONE mnt/etc/localtime || true
-            echo "$SYSTEM_TIMEZONE" | sudo tee mnt/etc/timezone
-          fi
-          # Locale - write defaults and create first-boot service to run locale-gen
-          if [ -n "$SYSTEM_LOCALE" ]; then
-            # uncomment locale in locale.gen
-            if [ -f mnt/etc/locale.gen ]; then
-              sudo sed -i 's/^#\s*'"$SYSTEM_LOCALE"'/''$SYSTEM_LOCALE' mnt/etc/locale.gen || true
-            fi
-            echo "LANG=$SYSTEM_LOCALE" | sudo tee mnt/etc/default/locale
-            echo "LC_ALL=$SYSTEM_LOCALE" | sudo tee -a mnt/etc/default/locale
-            echo "LANGUAGE=${SYSTEM_LOCALE%%.*}" | sudo tee -a mnt/etc/default/locale
-            # first-boot script will run locale-gen
-            echo '#!/bin/bash' | sudo tee mnt/usr/local/bin/runtipios-firstboot.sh
-            echo 'if [ -f /etc/locale.gen ]; then' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
-            echo '  locale-gen' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
-            echo 'fi' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
-            echo 'exit 0' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
-            sudo chmod +x mnt/usr/local/bin/runtipios-firstboot.sh
-            echo '[Unit]' | sudo tee mnt/etc/systemd/system/runtipios-firstboot.service
-            echo 'Description=RuntipiOS First Boot Locale Generation' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo 'After=network.target' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo '' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo '[Service]' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo 'Type=oneshot' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo 'ExecStart=/usr/local/bin/runtipios-firstboot.sh' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo '' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo '[Install]' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            echo 'WantedBy=multi-user.target' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
-            sudo ln -s ../runtipios-firstboot.service mnt/etc/systemd/system/multi-user.target.wants/runtipios-firstboot.service || true
-          fi
-
-          # Keyboard layout
-          if [ -n "$SYSTEM_KEYBOARD_LAYOUT" ]; then
-            echo 'XKBMODEL="pc105"' | sudo tee mnt/etc/default/keyboard
-            echo 'XKBLAYOUT="'$SYSTEM_KEYBOARD_LAYOUT'"' | sudo tee -a mnt/etc/default/keyboard
-            echo 'XKBVARIANT=""' | sudo tee -a mnt/etc/default/keyboard
-            echo 'XKBOPTIONS=""' | sudo tee -a mnt/etc/default/keyboard
-            echo 'BACKSPACE="guess"' | sudo tee -a mnt/etc/default/keyboard
-          fi
-
-          # WiFi country
-          if [ -n "$SYSTEM_WIFI_COUNTRY" ]; then
-            sudo mkdir -p mnt/etc/wpa_supplicant
-            if [ -f mnt/etc/wpa_supplicant/wpa_supplicant.conf ]; then
-              if sudo grep -q '^country=' mnt/etc/wpa_supplicant/wpa_supplicant.conf; then
-                sudo sed -i 's/^country=.*/country='$SYSTEM_WIFI_COUNTRY'/' mnt/etc/wpa_supplicant/wpa_supplicant.conf || true
-              else
-                echo "country=$SYSTEM_WIFI_COUNTRY" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
-              fi
-            else
-              echo "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev" | sudo tee mnt/etc/wpa_supplicant/wpa_supplicant.conf
-              echo "update_config=1" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
-              echo "country=$SYSTEM_WIFI_COUNTRY" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
-            fi
-          fi
-
-          # Create userconf.txt for headless setup
-          echo "--- Creating userconf.txt ---"
-          PASSWORD_HASH=$(echo '${{ steps.config.outputs.DEFAULT_PASSWORD }}' | openssl passwd -6 -stdin)
-          sudo bash -c "echo '${{ steps.config.outputs.DEFAULT_USER }}:$PASSWORD_HASH' > /mnt/boot/userconf.txt"
-
-          # 7. Setup Runtipi auto-installation
-          if [ "${{ steps.config.outputs.RUNTIPI_AUTO_INSTALL }}" = "True" ]; then
-            echo "--- Setting up Runtipi auto-installation ---"
-
-            # Create the installer script
-            sudo bash -c 'cat > /mnt/root/usr/local/bin/runtipi-installer.sh' << 'EOF'
-#!/bin/bash
-# This script runs on boot to install Runtipi if network is available.
-
-LOG_FILE="/var/log/runtipi-installer.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
-
-echo "--- Runtipi Installer Service Started at $(date) ---"
-
-# Check for Ethernet connection first
-if ! ip link | grep -q "eth0.*state UP"; then
-    echo "No active Ethernet (eth0) connection found. Exiting."
-    # Disable self, as we only try on the very first boot with ethernet
-    systemctl disable runtipi-installer.service
-    exit 0
-fi
-
-echo "Active Ethernet connection found. Waiting for internet connectivity..."
-
-# Wait for internet connection (max 5 minutes)
-for i in {1..60}; do
-  if ping -c 1 8.8.8.8 &> /dev/null; then
-    echo "Internet connection detected."
-    
-    echo "Starting Runtipi installation from ${{ steps.config.outputs.RUNTIPI_URL }}..."
-    if curl -L "${{ steps.config.outputs.RUNTIPI_URL }}" | bash; then
-      echo "Runtipi installation script finished successfully."
-      # Create dynamic MOTD script
-      cat > /etc/profile.d/runtipi-motd.sh << 'EOMOTD'
-#!/bin/bash
-IP_ADDRESS=$(hostname -I | awk '{print $1}')
-cat << "EOT"
-
-  ____              _   _       _     ___  ____  
- |  _ \ _   _ _ __ | |_(_)_ __ (_)   / _ \/ ___| 
- | |_) | | | | '_ \| __| | '_ \| |  | | | \___ \ 
- |  _ <| |_| | | | | |_| | |_) | |  | |_| |___) |
- |_| \_\\__,_|_| |_|\__|_| .__/|_|   \___/|____/ 
-                         |_|                      
-
-Welcome to RuntipiOS - Simplified Runtipi Deployment
-
-Quick Start:
-  - Web Interface: http://runtipi.local or http://{IP_ADDRESS}
-  - Documentation: https://runtipi.io
-
-EOT
-EOMOTD
-      chmod +x /etc/profile.d/runtipi-motd.sh
-      # Clear the static MOTD file
-      > /etc/motd
-    else
-      echo "Runtipi installation script failed."
-    fi
-    
-    # Disable this service from running again
-    echo "Disabling runtipi-installer service."
-    systemctl disable runtipi-installer.service
-    rm -f /etc/systemd/system/runtipi-installer.service
-    exit 0
-  fi
-  echo "Waiting for connection... (attempt $i)"
-  sleep 5
-done
-
-echo "Could not establish internet connection after 5 minutes. Runtipi not installed."
-echo "Disabling runtipi-installer service."
-systemctl disable runtipi-installer.service
-rm -f /etc/systemd/system/runtipi-installer.service
-exit 1
-EOF
-            sudo chmod +x /mnt/root/usr/local/bin/runtipi-installer.sh
-
-            # Create systemd service for the installer
-            sudo bash -c 'cat > /mnt/root/etc/systemd/system/runtipi-installer.service' << 'EOF'
-[Unit]
-Description=Runtipi Auto Installer
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/runtipi-installer.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            # Enable the service
-            sudo ln -sf /etc/systemd/system/runtipi-installer.service /mnt/root/etc/systemd/system/multi-user.target.wants/runtipi-installer.service
-          fi
-
-        shell: bash
+          chmod +x ./.github/scripts/configure-image.sh
+          ./.github/scripts/configure-image.sh
 
       - name: Sync and unmount
         run: |
