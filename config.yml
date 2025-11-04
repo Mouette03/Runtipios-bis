@@ -18,11 +18,12 @@ system:
 
 runtipi:
   auto_install: true
+  url: "https://raw.githubusercontent.com/runtipi/runtipi/develop/scripts/install.sh"
 
 wifi:
   ssid: "RuntipiOS-Setup"
   password: "runtipi123"  # Set to empty "" for open network (no password)
 
 build:
-  image_size: 4
-  compression_format: "xz"
+  image_size: 4G
+  compression_format: "xz" # 'gzip' or 'xz'

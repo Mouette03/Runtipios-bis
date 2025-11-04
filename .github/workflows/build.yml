@@ -1,0 +1,369 @@
+name: Build RuntipiOS Image
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    env:
+      WORKSPACE: ${{ github.workspace }}
+      CONFIG_FILE: ${{ github.workspace }}/config.yml
+      IMAGE_DIR: ${{ github.workspace }}/images
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse config.yml with Python
+        id: config
+        run: |
+          pip install pyyaml
+          python -c "
+          import yaml
+          import os
+
+          with open('config.yml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          env_file = os.getenv('GITHUB_ENV')
+          with open(env_file, 'a') as f:
+              f.write(f\"RASPIOS_IMAGE_URL={config['raspios']['image_url']}\n\")
+              f.write(f\"RASPIOS_IMAGE_NAME={config['raspios']['image_name']}\n\")
+              f.write(f\"HOSTNAME={config['system']['hostname']}\n\")
+              f.write(f\"TIMEZONE={config['system']['timezone']}\n\")
+              f.write(f\"LOCALE={config['system']['locale']}\n\")
+              f.write(f\"KEYBOARD_LAYOUT={config['system']['keyboard_layout']}\n\")
+              f.write(f\"WIFI_COUNTRY={config['system']['wifi_country']}\n\")
+              f.write(f\"DEFAULT_USER={config['system']['default_user']}\n\")
+              f.write(f\"DEFAULT_PASSWORD={config['system']['default_password']}\n\")
+              f.write(f\"IMAGE_SIZE={config['build']['image_size']}\n\")
+              f.write(f\"COMPRESSION_FORMAT={config['build']['compression_format']}\n\")
+              f.write(f\"RUNTIPI_AUTO_INSTALL={config['runtipi']['auto_install']}\n\")
+              f.write(f\"RUNTIPI_URL='{config['runtipi']['url']}'\n\")
+          "
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget xz-utils rsync parted kpartx dosfstools e2fsprogs qemu-user-static binfmt-support util-linux openssl
+
+      - name: Prepare images dir
+        run: mkdir -p $IMAGE_DIR
+
+      - name: Download base Raspberry Pi OS image
+        run: |
+          echo "Downloading $RASPIOS_URL to $IMAGE_DIR"
+          wget -O $IMAGE_DIR/raspios.img.xz "$RASPIOS_URL"
+
+      - name: Decompress base image
+        run: |
+          if [ ! -f "$IMAGE_DIR/raspios.img.xz" ]; then
+            echo "ERROR: downloaded image missing"
+            ls -l $IMAGE_DIR
+            exit 1
+          fi
+          xz -d -k -c "$IMAGE_DIR/raspios.img.xz" > "$IMAGE_DIR/raspios.img"
+          ls -lh $IMAGE_DIR
+
+      - name: Resize image file if requested
+        run: |
+          IMG="$IMAGE_DIR/raspios.img"
+          if [ -z "$BUILD_IMAGE_SIZE" ]; then
+            echo "No build.image_size provided, keeping base image size"
+            exit 0
+          fi
+          BYTES=$(( ${BUILD_IMAGE_SIZE} * 1024 * 1024 * 1024 ))
+          CUR=$(stat -c%s "$IMG")
+          echo "Current size: $CUR bytes, desired: $BYTES bytes"
+          if [ "$CUR" -lt "$BYTES" ]; then
+            echo "Expanding image to ${BUILD_IMAGE_SIZE}G"
+            truncate -s $BYTES "$IMG"
+          else
+            echo "Image is already >= desired size"
+          fi
+
+      - name: Setup loop device and map partitions
+        run: |
+          IMG="$IMAGE_DIR/raspios.img"
+          LOOPDEV=$(sudo losetup --find --show -P "$IMG")
+          echo "LOOPDEV=$LOOPDEV" >> $GITHUB_ENV
+          sleep 1
+          echo "Partitions:"
+          ls -l ${LOOPDEV}* || true
+
+      - name: Resize root partition to fill image
+        run: |
+          LOOPDEV=${LOOPDEV}
+          # try to resize partition 2 to 100%
+          sudo parted -s $LOOPDEV resizepart 2 100% || true
+          # run e2fsck and resize2fs on the partition device
+          ROOTPART=${LOOPDEV}p2
+          if [ ! -b "$ROOTPART" ]; then
+            echo "Root partition device $ROOTPART not found, aborting resize step"
+            exit 0
+          fi
+          sudo e2fsck -f -y $ROOTPART || true
+          sudo resize2fs $ROOTPART || true
+
+      - name: Mount partitions
+        run: |
+          mkdir -p mnt mnt/boot
+          LOOPDEV=${LOOPDEV}
+          BOOT=${LOOPDEV}p1
+          ROOT=${LOOPDEV}p2
+          echo "BOOT=$BOOT" >> $GITHUB_ENV
+          echo "ROOT=$ROOT" >> $GITHUB_ENV
+          sudo mount $ROOT mnt
+          sudo mount $BOOT mnt/boot
+
+      - name: Apply basic system configuration
+        run: |
+          set -e
+          # Hostname
+          if [ -n "$SYSTEM_HOSTNAME" ]; then
+            echo "$SYSTEM_HOSTNAME" | sudo tee mnt/etc/hostname
+            sudo sed -i '1s/.*/127.0.1.1\t'$SYSTEM_HOSTNAME'/' mnt/etc/hosts || true
+          fi
+          # Timezone
+          if [ -n "$SYSTEM_TIMEZONE" ]; then
+            sudo ln -sf /usr/share/zoneinfo/$SYSTEM_TIMEZONE mnt/etc/localtime || true
+            echo "$SYSTEM_TIMEZONE" | sudo tee mnt/etc/timezone
+          fi
+          # Locale - write defaults and create first-boot service to run locale-gen
+          if [ -n "$SYSTEM_LOCALE" ]; then
+            # uncomment locale in locale.gen
+            if [ -f mnt/etc/locale.gen ]; then
+              sudo sed -i 's/^#\s*'"$SYSTEM_LOCALE"'/''$SYSTEM_LOCALE' mnt/etc/locale.gen || true
+            fi
+            echo "LANG=$SYSTEM_LOCALE" | sudo tee mnt/etc/default/locale
+            echo "LC_ALL=$SYSTEM_LOCALE" | sudo tee -a mnt/etc/default/locale
+            echo "LANGUAGE=${SYSTEM_LOCALE%%.*}" | sudo tee -a mnt/etc/default/locale
+            # first-boot script will run locale-gen
+            echo '#!/bin/bash' | sudo tee mnt/usr/local/bin/runtipios-firstboot.sh
+            echo 'if [ -f /etc/locale.gen ]; then' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
+            echo '  locale-gen' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
+            echo 'fi' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
+            echo 'exit 0' | sudo tee -a mnt/usr/local/bin/runtipios-firstboot.sh
+            sudo chmod +x mnt/usr/local/bin/runtipios-firstboot.sh
+            echo '[Unit]' | sudo tee mnt/etc/systemd/system/runtipios-firstboot.service
+            echo 'Description=RuntipiOS First Boot Locale Generation' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo 'After=network.target' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo '' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo '[Service]' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo 'Type=oneshot' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo 'ExecStart=/usr/local/bin/runtipios-firstboot.sh' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo '' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo '[Install]' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            echo 'WantedBy=multi-user.target' | sudo tee -a mnt/etc/systemd/system/runtipios-firstboot.service
+            sudo ln -s ../runtipios-firstboot.service mnt/etc/systemd/system/multi-user.target.wants/runtipios-firstboot.service || true
+          fi
+
+          # Keyboard layout
+          if [ -n "$SYSTEM_KEYBOARD_LAYOUT" ]; then
+            echo 'XKBMODEL="pc105"' | sudo tee mnt/etc/default/keyboard
+            echo 'XKBLAYOUT="'$SYSTEM_KEYBOARD_LAYOUT'"' | sudo tee -a mnt/etc/default/keyboard
+            echo 'XKBVARIANT=""' | sudo tee -a mnt/etc/default/keyboard
+            echo 'XKBOPTIONS=""' | sudo tee -a mnt/etc/default/keyboard
+            echo 'BACKSPACE="guess"' | sudo tee -a mnt/etc/default/keyboard
+          fi
+
+          # WiFi country
+          if [ -n "$SYSTEM_WIFI_COUNTRY" ]; then
+            sudo mkdir -p mnt/etc/wpa_supplicant
+            if [ -f mnt/etc/wpa_supplicant/wpa_supplicant.conf ]; then
+              if sudo grep -q '^country=' mnt/etc/wpa_supplicant/wpa_supplicant.conf; then
+                sudo sed -i 's/^country=.*/country='$SYSTEM_WIFI_COUNTRY'/' mnt/etc/wpa_supplicant/wpa_supplicant.conf || true
+              else
+                echo "country=$SYSTEM_WIFI_COUNTRY" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
+              fi
+            else
+              echo "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev" | sudo tee mnt/etc/wpa_supplicant/wpa_supplicant.conf
+              echo "update_config=1" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
+              echo "country=$SYSTEM_WIFI_COUNTRY" | sudo tee -a mnt/etc/wpa_supplicant/wpa_supplicant.conf
+            fi
+          fi
+
+          # Create userconf.txt for headless setup
+          echo "--- Creating userconf.txt ---"
+          PASSWORD_HASH=$(echo '${{ steps.config.outputs.DEFAULT_PASSWORD }}' | openssl passwd -6 -stdin)
+          sudo bash -c "echo '${{ steps.config.outputs.DEFAULT_USER }}:$PASSWORD_HASH' > /mnt/boot/userconf.txt"
+
+          # 7. Setup Runtipi auto-installation
+          if [ "${{ steps.config.outputs.RUNTIPI_AUTO_INSTALL }}" = "True" ]; then
+            echo "--- Setting up Runtipi auto-installation ---"
+
+            # Create the installer script
+            sudo bash -c 'cat > /mnt/root/usr/local/bin/runtipi-installer.sh' << 'EOF'
+#!/bin/bash
+# This script runs on boot to install Runtipi if network is available.
+
+LOG_FILE="/var/log/runtipi-installer.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "--- Runtipi Installer Service Started at $(date) ---"
+
+# Check for Ethernet connection first
+if ! ip link | grep -q "eth0.*state UP"; then
+    echo "No active Ethernet (eth0) connection found. Exiting."
+    # Disable self, as we only try on the very first boot with ethernet
+    systemctl disable runtipi-installer.service
+    exit 0
+fi
+
+echo "Active Ethernet connection found. Waiting for internet connectivity..."
+
+# Wait for internet connection (max 5 minutes)
+for i in {1..60}; do
+  if ping -c 1 8.8.8.8 &> /dev/null; then
+    echo "Internet connection detected."
+    
+    echo "Starting Runtipi installation from ${{ steps.config.outputs.RUNTIPI_URL }}..."
+    if curl -L "${{ steps.config.outputs.RUNTIPI_URL }}" | bash; then
+      echo "Runtipi installation script finished successfully."
+      # Create dynamic MOTD script
+      cat > /etc/profile.d/runtipi-motd.sh << 'EOMOTD'
+#!/bin/bash
+IP_ADDRESS=$(hostname -I | awk '{print $1}')
+cat << "EOT"
+
+  ____              _   _       _     ___  ____  
+ |  _ \ _   _ _ __ | |_(_)_ __ (_)   / _ \/ ___| 
+ | |_) | | | | '_ \| __| | '_ \| |  | | | \___ \ 
+ |  _ <| |_| | | | | |_| | |_) | |  | |_| |___) |
+ |_| \_\\__,_|_| |_|\__|_| .__/|_|   \___/|____/ 
+                         |_|                      
+
+Welcome to RuntipiOS - Simplified Runtipi Deployment
+
+Quick Start:
+  - Web Interface: http://runtipi.local or http://{IP_ADDRESS}
+  - Documentation: https://runtipi.io
+
+EOT
+EOMOTD
+      chmod +x /etc/profile.d/runtipi-motd.sh
+      # Clear the static MOTD file
+      > /etc/motd
+    else
+      echo "Runtipi installation script failed."
+    fi
+    
+    # Disable this service from running again
+    echo "Disabling runtipi-installer service."
+    systemctl disable runtipi-installer.service
+    rm -f /etc/systemd/system/runtipi-installer.service
+    exit 0
+  fi
+  echo "Waiting for connection... (attempt $i)"
+  sleep 5
+done
+
+echo "Could not establish internet connection after 5 minutes. Runtipi not installed."
+echo "Disabling runtipi-installer service."
+systemctl disable runtipi-installer.service
+rm -f /etc/systemd/system/runtipi-installer.service
+exit 1
+EOF
+            sudo chmod +x /mnt/root/usr/local/bin/runtipi-installer.sh
+
+            # Create systemd service for the installer
+            sudo bash -c 'cat > /mnt/root/etc/systemd/system/runtipi-installer.service' << 'EOF'
+[Unit]
+Description=Runtipi Auto Installer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runtipi-installer.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            # Enable the service
+            sudo ln -sf /etc/systemd/system/runtipi-installer.service /mnt/root/etc/systemd/system/multi-user.target.wants/runtipi-installer.service
+          fi
+
+        shell: bash
+
+      - name: Sync and unmount
+        run: |
+          sync
+          sudo umount mnt/boot || true
+          sudo umount mnt || true
+          sudo losetup -d $LOOPDEV || true
+
+      - name: Unmount partitions
+        if: always()
+        run: |
+          sudo umount /mnt/root || true
+          sudo umount /mnt/boot || true
+          sudo losetup -d $LOOP_DEVICE || true
+
+      - name: Verify configuration
+        run: |
+          echo "--- Verifying configuration ---"
+          LOOP_DEVICE=$(sudo losetup -f)
+          sudo losetup -P $LOOP_DEVICE ${{ steps.config.outputs.RASPIOS_IMAGE_NAME }}
+          sudo mount /dev/disk/by-partuuid/$(sudo blkid -s PARTUUID -o value ${LOOP_DEVICE}p2) /mnt/root
+          sudo mount /dev/disk/by-partuuid/$(sudo blkid -s PARTUUID -o value ${LOOP_DEVICE}p1) /mnt/boot
+
+          # Verify hostname
+          if [ "$(sudo cat /mnt/root/etc/hostname)" != "${{ steps.config.outputs.HOSTNAME }}" ]; then
+            echo "::error::Hostname verification failed!"
+            exit 1
+          fi
+          echo "Hostname verification successful."
+
+          # Verify userconf.txt
+          if ! sudo grep -q "^{{ steps.config.outputs.DEFAULT_USER }}:" /mnt/boot/userconf.txt; then
+            echo "::error::userconf.txt verification failed!"
+            exit 1
+          fi
+          echo "userconf.txt verification successful."
+
+          # Verify locale
+          if ! sudo grep -q "LANG=${{ steps.config.outputs.LOCALE }}" /mnt/root/etc/default/locale; then
+            echo "::error::Locale verification failed!"
+            exit 1
+          fi
+          echo "Locale verification successful."
+
+          # Verify keyboard
+          if ! sudo grep -q 'XKBMODEL="pc105"' /mnt/root/etc/default/keyboard || ! sudo grep -q "XKBLAYOUT=${{ steps.config.outputs.KEYBOARD_LAYOUT }}" /mnt/root/etc/default/keyboard; then
+            echo "::error::Keyboard verification failed!"
+            exit 1
+          fi
+          echo "Keyboard verification successful."
+
+          echo "--- Verification complete ---"
+        
+      - name: Compress final image
+        run: |
+          IMG="$IMAGE_DIR/raspios.img"
+          OUT="$IMAGE_DIR/runtipios.img"
+          cp "$IMG" "$OUT"
+          case "$BUILD_COMPRESSION_FORMAT" in
+            xz|XZ)
+              xz -T0 -z -c "$OUT" > "$OUT.xz"
+              ARTIFACT="$OUT.xz"
+              ;;
+            gz|gz|gzip)
+              gzip -c "$OUT" > "$OUT.gz"
+              ARTIFACT="$OUT.gz"
+              ;;
+            *)
+              # default to xz
+              xz -T0 -z -c "$OUT" > "$OUT.xz"
+              ARTIFACT="$OUT.xz"
+              ;;
+          esac
+          echo "ARTIFACT=$ARTIFACT" >> $GITHUB_ENV
+
+      - name: Upload compressed image
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtipios-image
+          path: images/runtipios.img.*
