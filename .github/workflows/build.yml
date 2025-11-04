@@ -30,10 +30,14 @@ jobs:
           with open('config.yml', 'r') as f:
               config = yaml.safe_load(f)
 
+          # Extract image name from URL
+          raspios_url = config['raspios']['url']
+          image_name = raspios_url.split('/')[-1]
+
           env_file = os.getenv('GITHUB_ENV')
           with open(env_file, 'a') as f:
-              f.write(f\"RASPIOS_IMAGE_URL={config['raspios']['image_url']}\n\")
-              f.write(f\"RASPIOS_IMAGE_NAME={config['raspios']['image_name']}\n\")
+              f.write(f\"RASPIOS_IMAGE_URL={raspios_url}\n\")
+              f.write(f\"RASPIOS_IMAGE_NAME={image_name}\n\")
               f.write(f\"HOSTNAME={config['system']['hostname']}\n\")
               f.write(f\"TIMEZONE={config['system']['timezone']}\n\")
               f.write(f\"LOCALE={config['system']['locale']}\n\")
@@ -44,7 +48,7 @@ jobs:
               f.write(f\"IMAGE_SIZE={config['build']['image_size']}\n\")
               f.write(f\"COMPRESSION_FORMAT={config['build']['compression_format']}\n\")
               f.write(f\"RUNTIPI_AUTO_INSTALL={config['runtipi']['auto_install']}\n\")
-              f.write(f\"RUNTIPI_URL='{config['runtipi']['url']}'\n\")
+              f.write(f\"RUNTIPI_URL={config['runtipi']['url']}\n\")
           "
 
       - name: Install dependencies
