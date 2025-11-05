@@ -66,50 +66,10 @@ EOF
 sudo ln -sf /etc/systemd/system/set-wifi-region.service "$ROOT_MOUNT/etc/systemd/system/sysinit.target.wants/set-wifi-region.service"
 
 echo "--- (2/4) Setting up user and enabling SSH ---"
-# Create userconf.txt for headless setup (used by systemd-firstboot)
+# Create userconf.txt for headless setup (used by userconfig.service on first boot)
 echo "Creating userconf.txt for user $DEFAULT_USER"
 PASSWORD_HASH=$(echo "$DEFAULT_PASSWORD" | openssl passwd -6 -stdin)
 echo "$DEFAULT_USER:$PASSWORD_HASH" | sudo tee "$BOOT_MOUNT/userconf.txt" > /dev/null
-
-# ALSO create the user directly in the image to avoid firstboot issues
-echo "Creating user $DEFAULT_USER in /etc/passwd and /etc/shadow"
-# Check if user doesn't already exist
-if ! sudo grep -q "^$DEFAULT_USER:" "$ROOT_MOUNT/etc/passwd"; then
-    # Get next available UID (typically 1000)
-    NEXT_UID=$(sudo awk -F: '$3 >= 1000 && $3 < 60000 {print $3}' "$ROOT_MOUNT/etc/passwd" | sort -n | tail -1)
-    NEXT_UID=$((NEXT_UID + 1))
-    if [ -z "$NEXT_UID" ] || [ "$NEXT_UID" -lt 1000 ]; then
-        NEXT_UID=1000
-    fi
-    
-    # Add user to passwd
-    echo "$DEFAULT_USER:x:$NEXT_UID:$NEXT_UID::/home/$DEFAULT_USER:/bin/bash" | sudo tee -a "$ROOT_MOUNT/etc/passwd" > /dev/null
-    # Add group
-    echo "$DEFAULT_USER:x:$NEXT_UID:" | sudo tee -a "$ROOT_MOUNT/etc/group" > /dev/null
-    # Add user to shadow with hashed password
-    echo "$DEFAULT_USER:$PASSWORD_HASH:19000:0:99999:7:::" | sudo tee -a "$ROOT_MOUNT/etc/shadow" > /dev/null
-    # Add user to important groups
-    sudo sed -i "s/^\(sudo:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(adm:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(dialout:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(cdrom:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(audio:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(video:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(plugdev:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(users:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(netdev:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(input:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group"
-    sudo sed -i "s/^\(spi:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
-    sudo sed -i "s/^\(i2c:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
-    sudo sed -i "s/^\(gpio:.*\)/\1,$DEFAULT_USER/" "$ROOT_MOUNT/etc/group" 2>/dev/null || true
-    
-    # Create home directory
-    sudo mkdir -p "$ROOT_MOUNT/home/$DEFAULT_USER"
-    # Copy skel files
-    sudo cp -r "$ROOT_MOUNT/etc/skel/." "$ROOT_MOUNT/home/$DEFAULT_USER/" 2>/dev/null || true
-    # Set ownership (will be corrected on first boot, but set UID:GID)
-    sudo chown -R $NEXT_UID:$NEXT_UID "$ROOT_MOUNT/home/$DEFAULT_USER"
-fi
 
 # Enable SSH by creating the 'ssh' file
 echo "Enabling SSH"
@@ -320,13 +280,13 @@ EOF
     sudo tee "$ROOT_MOUNT/etc/systemd/system/runtipi-installer.service" > /dev/null <<'EOF'
 [Unit]
 Description=Runtipi Auto-Installer
-After=network-online.target systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
+After=network-online.target systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service userconfig.service
 Wants=network-online.target
 Before=getty@tty1.service
 
 [Service]
 Type=idle
-ExecStartPre=/bin/sleep 3
+ExecStartPre=/bin/sleep 5
 ExecStart=/usr/local/bin/runtipi-installer.sh
 StandardInput=tty
 StandardOutput=tty
