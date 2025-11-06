@@ -133,8 +133,13 @@ BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_RUNTIPIOS_PATH)/board/runtipi/rootfs-overlay"
 # Custom scripts
 # Custom scripts
 BR2_ROOTFS_POST_BUILD_SCRIPT="$(BR2_EXTERNAL_RUNTIPIOS_PATH)/board/runtipi/post-build.sh"
-BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_RUNTIPIOS_PATH)/board/runtipi/post-image.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_RUNTIPIOS_PATH)/board/runtipi/post-image.sh support/scripts/genimage.sh"
 BR2_ROOTFS_POST_SCRIPT_ARGS="-c $(BR2_EXTERNAL_RUNTIPIOS_PATH)/board/runtipi/genimage.cfg"
+
+# genimage dependencies
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_PACKAGE_HOST_MTOOLS=y
 
 # Custom packages
 BR2_PACKAGE_RUNTIPI=y

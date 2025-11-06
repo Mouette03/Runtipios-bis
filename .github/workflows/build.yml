@@ -63,16 +63,36 @@ jobs:
           echo "Building RuntipiOS for ${{ matrix.board }}..."
           make -j$(nproc) 2>&1 | tee build.log
           echo "Build completed!"
+          
+          # List generated images for debugging
+          echo "=== Generated images ==="
+          ls -lh output/images/
 
       - name: Package artifacts
         if: success()
         run: |
           mkdir -p artifacts
           
-          # Copy image
+          # Check what was generated
+          echo "=== Checking build output ==="
+          ls -lh buildroot/output/images/
+          
+          # Copy the SD card image if it exists
           if [ -f buildroot/output/images/sdcard.img ]; then
+            echo "Found sdcard.img, packaging..."
             cp buildroot/output/images/sdcard.img artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
-            gzip artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
+            
+            # Compress the image
+            echo "Compressing image..."
+            gzip -9 artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
+            
+            echo "Image packaged successfully:"
+            ls -lh artifacts/*.img.gz
+          else
+            echo "ERROR: sdcard.img not found!"
+            echo "Available files:"
+            find buildroot/output/images -type f
+            exit 1
           fi
           
           # Copy build info
@@ -86,21 +106,24 @@ jobs:
           Buildroot Version: ${{ github.event.inputs.buildroot_version || '2024.08.x' }}
           EOF
           
+          echo "=== Final artifacts ==="
           ls -lh artifacts/
 
       - name: Upload build artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: runtipios-${{ matrix.board }}-${{ github.run_number }}
-          path: artifacts/*
+          name: runtipios-${{ matrix.board }}
+          path: |
+            artifacts/*.img.gz
+            artifacts/build-info.txt
           retention-days: 30
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log-${{ matrix.board }}-${{ github.run_number }}
+          name: build-log-${{ matrix.board }}
           path: buildroot/build.log
           retention-days: 7
 
