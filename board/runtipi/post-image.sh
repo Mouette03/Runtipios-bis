@@ -52,14 +52,23 @@ echo "Running genimage..."
 GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
 if [ -f "${BINARIES_DIR}/bcm2712-rpi-5-b.dtb" ] && [ -f "${BOARD_DIR}/genimage-rpi5.cfg" ]; then
     GENIMAGE_CFG="${BOARD_DIR}/genimage-rpi5.cfg"
+    echo "Using Raspberry Pi 5 genimage config"
+else
+    echo "Using Raspberry Pi 4 genimage config"
 fi
 
-mkdir -p "${BINARIES_DIR}/genimage.tmp"
-genimage --rootpath "${BINARIES_DIR}/rootfs" \
-                 --tmppath "${BINARIES_DIR}/genimage.tmp" \
-                 --inputpath "${BINARIES_DIR}" \
-                 --outputpath "${BINARIES_DIR}" \
-                 --config "${GENIMAGE_CFG}"
+# Create genimage temp directory
+GENIMAGE_TMP="${BINARIES_DIR}/genimage.tmp"
+rm -rf "${GENIMAGE_TMP}"
+
+genimage \
+    --rootpath "${TARGET_DIR}" \
+    --tmppath "${GENIMAGE_TMP}" \
+    --inputpath "${BINARIES_DIR}" \
+    --outputpath "${BINARIES_DIR}" \
+    --config "${GENIMAGE_CFG}"
 
 echo "genimage finished using ${GENIMAGE_CFG}"
+echo "Generated files:"
+ls -lh "${BINARIES_DIR}/"*.img 2>/dev/null || echo "No .img files found"
 echo "=== Post-Image Script Completed ==="
