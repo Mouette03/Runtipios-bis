@@ -14,40 +14,28 @@ if [ -f "$INSTALL_FLAG" ]; then
     exit 0
 fi
 
-echo "Installing Runtipi..."
+echo "Installing Runtipi with Docker..."
 
-# Ensure Docker is running
-systemctl is-active --quiet docker || systemctl start docker
-
-# Wait for Docker to be ready
-timeout=30
-while ! docker info >/dev/null 2>&1; do
-    if [ $timeout -le 0 ]; then
-        echo "Docker failed to start"
-        exit 1
-    fi
-    echo "Waiting for Docker..."
-    sleep 2
-    timeout=$((timeout - 2))
-done
-
-# Download and install Runtipi
+# Ensure we're in the right directory
+mkdir -p "$RUNTIPI_DIR"
 cd "$RUNTIPI_DIR"
 
-# Clone or download Runtipi
-if [ ! -d "$RUNTIPI_DIR/.git" ]; then
-    git clone https://github.com/runtipi/runtipi.git /tmp/runtipi-src
-    cp -r /tmp/runtipi-src/* "$RUNTIPI_DIR/"
-    rm -rf /tmp/runtipi-src
-fi
+# Install Runtipi using official installer (includes Docker)
+# This will install Docker if not present and set up Runtipi
+curl -L https://setup.runtipi.io | bash
 
-# Run Runtipi setup
-if [ -x "$RUNTIPI_DIR/scripts/install.sh" ]; then
-    bash "$RUNTIPI_DIR/scripts/install.sh"
-elif [ -x "$RUNTIPI_DIR/runtipi-cli" ]; then
-    ./runtipi-cli setup
-fi
+# Wait for installation to complete
+sleep 5
 
 # Mark as installed
+mkdir -p "$STATE_DIR"
 touch "$INSTALL_FLAG"
-echo "Runtipi installation completed"
+echo "Runtipi installation completed successfully"
+
+# Display access information
+echo ""
+echo "=========================================="
+echo "Runtipi is now installed!"
+echo "Access it at: http://$(hostname -I | awk '{print $1}')"
+echo "Or: http://$(hostname).local"
+echo "=========================================="

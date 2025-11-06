@@ -1,0 +1,38 @@
+# RuntipiOS Boot Configuration for Raspberry Pi 5
+# See https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+# GPU Memory
+gpu_mem=128
+
+# Enable audio
+dtparam=audio=on
+
+# Enable I2C and SPI
+dtparam=i2c_arm=on
+dtparam=spi=on
+
+# Enable UART
+enable_uart=1
+
+# Disable splash screen
+disable_splash=1
+
+# Boot faster
+boot_delay=0
+disable_overscan=1
+
+# 64-bit mode
+arm_64bit=1
+
+# Kernel for Pi 5
+kernel=kernel_2712.img
+
+# Device Tree overlays for Pi 5
+dtoverlay=vc4-kms-v3d-pi5
+
+# Camera (disabled by default to save memory)
+camera_auto_detect=0
+
+# Network boot (optional)
+# dtparam=act_led_trigger=none
+# dtparam=pwr_led_trigger=default-on

@@ -20,6 +20,7 @@ jobs:
       matrix:
         board:
           - runtipios_rpi4_64
+          - runtipios_rpi5_64
 
     steps:
       - name: Checkout repository

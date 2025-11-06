@@ -5,61 +5,57 @@
 set -e
 
 BOARD_DIR="$(dirname $0)"
-GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
-GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
+BINARIES_DIR="${1}"
 
 echo "=== RuntipiOS Post-Image Script ==="
+echo "BOARD_DIR: ${BOARD_DIR}"
+echo "BINARIES_DIR: ${BINARIES_DIR}"
 
-# Create boot configuration
-cat > "${BINARIES_DIR}/config.txt" << 'EOF'
-# RuntipiOS Boot Configuration
-# See https://www.raspberrypi.com/documentation/computers/config_txt.html
+# Determine which board we're building for
+if [ -f "${BINARIES_DIR}/.config" ]; then
+    if grep -q "bcm2712" "${BINARIES_DIR}/.config" 2>/dev/null; then
+        BOARD_TYPE="rpi5"
+    else
+        BOARD_TYPE="rpi4"
+    fi
+else
+    BOARD_TYPE="rpi4"
+fi
 
-# GPU Memory
-gpu_mem=128
+echo "Board type detected: ${BOARD_TYPE}"
 
-# Enable audio
-dtparam=audio=on
+# Create boot configuration based on board type
+if [ "${BOARD_TYPE}" = "rpi5" ]; then
+    CONFIG_TXT="${BOARD_DIR}/config_rpi5.txt"
+    KERNEL_NAME="kernel_2712.img"
+else
+    CONFIG_TXT="${BOARD_DIR}/config.txt"
+    KERNEL_NAME="Image"
+fi
 
-# Enable I2C and SPI
-dtparam=i2c_arm=on
-dtparam=spi=on
-
-# Enable UART
-enable_uart=1
-
-# Disable splash screen
-disable_splash=1
-
-# Boot faster
-boot_delay=0
-disable_overscan=1
-
-# 64-bit mode
-arm_64bit=1
-
-# Kernel
-kernel=kernel8.img
-
-# Device Tree overlays
-dtoverlay=vc4-kms-v3d
-max_framebuffers=2
-
-# Camera
-start_x=0
-
-# Overclocking (optional, uncommented for safety)
-#over_voltage=2
-#arm_freq=1800
-EOF
+# Copy config.txt
+if [ -f "${CONFIG_TXT}" ]; then
+    cp "${CONFIG_TXT}" "${BINARIES_DIR}/config.txt"
+    echo "Copied ${CONFIG_TXT} to ${BINARIES_DIR}/config.txt"
+else
+    echo "Warning: ${CONFIG_TXT} not found, using default"
+fi
 
 # Create cmdline.txt
 cat > "${BINARIES_DIR}/cmdline.txt" << 'EOF'
 console=serial0,115200 console=tty1 root=/dev/mmcblk0p2 rootfstype=ext4 rootwait quiet loglevel=3 logo.nologo vt.global_cursor_default=0
 EOF
 
-# Copy additional boot files
-cp "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/config.txt" 2>/dev/null || true
+echo "Created cmdline.txt"
 
-echo "Boot files created successfully"
+# Rename kernel if needed
+if [ -f "${BINARIES_DIR}/Image" ] && [ "${KERNEL_NAME}" != "Image" ]; then
+    cp "${BINARIES_DIR}/Image" "${BINARIES_DIR}/${KERNEL_NAME}"
+    echo "Copied kernel as ${KERNEL_NAME}"
+fi
+
+# List files for debugging
+echo "Files in ${BINARIES_DIR}:"
+ls -lh "${BINARIES_DIR}/" | head -20
+
 echo "=== Post-Image Script Completed ==="
