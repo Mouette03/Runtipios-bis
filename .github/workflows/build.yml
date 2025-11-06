@@ -2,185 +2,76 @@ name: "Build RuntipiOS"
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - { target: "rpi4-64", arch: "aarch64", name: "Raspberry Pi 4/5 64-bit" }
+          - { target: "rpi5-64", name: "Raspberry Pi 5" }
+          - { target: "rpi4-64", name: "Raspberry Pi 4" }
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Initialize and update submodules
+      - name: Clone Buildroot
         run: |
-          git config --global url."https://github.com/".insteadOf git://
-          git submodule update --init --recursive --depth 1
-          
-          # If buildroot still doesn't exist, add it
-          if [ ! -d "buildroot/.git" ]; then
-            echo "Cloning Buildroot..."
+          if [ ! -d "buildroot" ]; then
             git clone --depth 1 https://github.com/buildroot/buildroot.git buildroot
           fi
-          
-          ls -la buildroot/ | head -20
+          ls -la buildroot/ | head
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            git \
-            curl \
-            wget \
-            bc \
-            rsync \
-            asciidoc \
-            binutils \
-            bison \
-            flex \
-            unzip \
-            libssl-dev \
-            libffi-dev \
-            perl \
-            python3 \
-            python3-dev \
-            cpio \
-            patchelf \
-            file \
-            lzop \
-            device-tree-compiler \
-            u-boot-tools \
-            meson \
-            ninja-build
-
-      - name: Verify Buildroot
-        run: |
-          if [ ! -f "buildroot/Makefile" ]; then
-            echo "ERROR: Buildroot Makefile not found!"
-            ls -la buildroot/
-            exit 1
-          fi
-          echo "✓ Buildroot verified"
-          cd buildroot && ls -la | head -20
-
-      - name: Create board configuration
-        run: |
-          mkdir -p board/runtipi/configs
-          if [ ! -f "board/runtipi/configs/${{ matrix.target }}_defconfig" ]; then
-            echo "ERROR: defconfig not found at board/runtipi/configs/${{ matrix.target }}_defconfig"
-            find board -type f -name "*defconfig"
-            exit 1
-          fi
-          echo "✓ Board configuration found"
-          wc -l board/runtipi/configs/${{ matrix.target }}_defconfig
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential git curl wget bc rsync binutils bison flex unzip libssl-dev libffi-dev perl python3 cpio patchelf file lzop device-tree-compiler u-boot-tools
 
       - name: Configure Buildroot
         run: |
           cd buildroot
-          echo "Configuring for ${{ matrix.target }}..."
           make BR2_EXTERNAL=.. O=output ${{ matrix.target }}_defconfig
-          
-          if [ ! -f "output/.config" ]; then
-            echo "ERROR: Buildroot configuration failed"
-            exit 1
-          fi
-          
-          echo "✓ Buildroot configured"
-          wc -l output/.config
+          [ -f output/.config ] || exit 1
+          echo "✓ Configured for ${{ matrix.target }}"
 
       - name: Build Buildroot
         run: |
           cd buildroot
-          echo "Starting Buildroot build..."
-          echo "This may take 30-60 minutes..."
-          
-          make O=output -j$(nproc) 2>&1 | tee build.log
-          
-          BUILD_RESULT=${PIPESTATUS[0]}
-          if [ $BUILD_RESULT -ne 0 ]; then
-            echo "Build failed!"
-            echo "Last 50 lines of log:"
-            tail -50 build.log
-            exit 1
-          fi
+          echo "Building ${{ matrix.name }}..."
+          make O=output -j$(nproc)
+          echo "✓ Build completed"
 
-      - name: Check build artifacts
-        run: |
-          cd buildroot/output
-          echo "Build artifacts:"
-          ls -lh images/ 2>/dev/null || ls -lh
-          
-          if [ -d "images" ]; then
-            du -sh images/
-            find images -type f | head -20
-          fi
-
-      - name: Package artifacts
+      - name: Create artifact
         if: success()
         run: |
-          cd buildroot/output
-          
-          # Create a tarball of all build outputs
-          tar -czf /tmp/runtipi-${{ matrix.target }}-build-${{ github.run_number }}.tar.gz images/
-          
-          echo "✓ Artifacts packaged:"
-          ls -lh /tmp/runtipi-*.tar.gz
+          mkdir -p /tmp/artifacts
+          cd buildroot/output/images
+          tar -czf /tmp/artifacts/runtipi-${{ matrix.target }}-${{ github.run_number }}.tar.gz .
+          ls -lh /tmp/artifacts/
 
-      - name: Upload artifacts
+      - name: Upload artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: runtipi-${{ matrix.target }}-${{ github.run_number }}
-          path: /tmp/runtipi-*.tar.gz
+          path: /tmp/artifacts/runtipi-*.tar.gz
           retention-days: 30
-          if-no-files-found: warn
 
-      - name: Create Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Release on Tag
+        if: startsWith(github.ref, 'refs/tags/') && success()
         uses: softprops/action-gh-release@v1
         with:
-          files: /tmp/runtipi-*.tar.gz
-          draft: false
-          prerelease: false
-          body: |
-            RuntipiOS Build for ${{ matrix.name }}
-            
-            Build Date: ${{ github.event.head_commit.timestamp }}
-            Build Number: ${{ github.run_number }}
+          files: /tmp/artifacts/runtipi-*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build failed - Upload logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: runtipi-${{ matrix.target }}-build-logs-${{ github.run_number }}
-          path: |
-            buildroot/build.log
-            buildroot/output/.config
-          retention-days: 7
-
-      - name: Build summary
+      - name: Summary
         if: always()
         run: |
-          echo "========================================="
-          echo "Build Summary"
-          echo "========================================="
-          echo "Target: ${{ matrix.target }}"
-          echo "Architecture: ${{ matrix.arch }}"
-          echo "Status: ${{ job.status }}"
-          echo "Run number: ${{ github.run_number }}"
-          echo "========================================="
+          echo "Build: ${{ job.status }} | Target: ${{ matrix.target }} | Run: ${{ github.run_number }}"
