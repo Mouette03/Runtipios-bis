@@ -1,12 +1,64 @@
 name: "Build RuntipiOS"
+
 on:
   push:
     branches: [main, develop]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - { target: "rpi4-64", arch: "aarch64", name: "Raspberry Pi 4/5 64-bit" }
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Build RuntipiOS
-        run: echo "RuntipiOS build configured"
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git curl wget bc rsync             binutils bison flex unzip libssl-dev libffi-dev perl python3             python3-dev cpio patchelf file lzop device-tree-compiler u-boot-tools
+
+      - name: Initialize Buildroot
+        run: |
+          git submodule update --init --recursive ||           git submodule add https://github.com/buildroot/buildroot.git buildroot
+
+      - name: Configure Buildroot
+        run: |
+          cd buildroot
+          make BR2_EXTERNAL=.. ${{ matrix.target }}_defconfig
+
+      - name: Build Buildroot
+        run: |
+          cd buildroot
+          make -j$(nproc)
+
+      - name: Package artifacts
+        if: success()
+        run: |
+          cd buildroot/output/images
+          ls -lh
+          tar -czf /tmp/runtipi-${{ matrix.target }}-${{ github.run_number }}.tar.gz .
+          ls -lh /tmp/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtipi-${{ matrix.target }}-${{ github.run_number }}
+          path: /tmp/runtipi-*.tar.gz
+          retention-days: 30
+
+      - name: Create Release on Tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: /tmp/runtipi-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
