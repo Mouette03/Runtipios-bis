@@ -1,0 +1,23 @@
+# RuntipiOS Boot Configuration for Raspberry Pi 4
+# See https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+# 64-bit mode
+arm_64bit=1
+
+# GPU Memory
+gpu_mem=128
+
+# Enable UART
+enable_uart=1
+
+# Kernel
+kernel=Image
+
+# Device Tree overlays
+dtoverlay=vc4-kms-v3d
+
+# Disable splash screen
+disable_splash=1
+
+# Boot faster
+boot_delay=0

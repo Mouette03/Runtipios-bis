@@ -21,7 +21,7 @@ BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
 
 BR2_PACKAGE_RPI_FIRMWARE=y
 BR2_PACKAGE_RPI_FIRMWARE_VARIANT_PI5=y
-BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="board/runtipi/config_rpi5.txt"
+BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="board/runtipi/rpi5/config_rpi5.txt"
 
 # Required tools to create the SD image
 BR2_PACKAGE_HOST_DOSFSTOOLS=y
@@ -33,9 +33,9 @@ BR2_TARGET_ROOTFS_EXT2=y
 BR2_TARGET_ROOTFS_EXT2_4=y
 BR2_TARGET_ROOTFS_EXT2_SIZE="1500M"
 
-BR2_ROOTFS_OVERLAY="board/runtipi/rootfs-overlay"
-BR2_ROOTFS_POST_BUILD_SCRIPT="board/runtipi/post-build.sh"
-BR2_ROOTFS_POST_IMAGE_SCRIPT="board/runtipi/post-image.sh"
+BR2_ROOTFS_OVERLAY="board/runtipi/common/rootfs-overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/runtipi/common/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="board/runtipi/rpi5/post-image.sh"
 
 # Init system
 BR2_INIT_SYSTEMD=y
