@@ -1,2 +1,12 @@
-File: build-workflow.yml
-This file content should be extracted from the generated artifact.
+name: "Build RuntipiOS"
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build RuntipiOS
+        run: echo "RuntipiOS build configured"

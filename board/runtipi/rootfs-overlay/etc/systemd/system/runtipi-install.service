@@ -1,2 +1,17 @@
-File: runtipi-install.service
-This file content should be extracted from the generated artifact.
+[Unit]
+Description=RuntipiOS Automatic Runtipi Installation
+After=network-online.target runtipi-network.service
+Wants=network-online.target
+ConditionPathExists=!/etc/runtipi/installed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runtipi-install-runtipi.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+User=runtipi
+Environment="HOME=/home/runtipi"
+
+[Install]
+WantedBy=multi-user.target

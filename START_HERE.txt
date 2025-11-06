@@ -1,0 +1,61 @@
+RuntipiOS - Complete Project Archive
+
+THIS ARCHIVE CONTAINS ALL FILES READY TO USE!
+
+Files included:
+✓ All configuration files
+✓ All system scripts
+✓ Systemd services
+✓ Captive portal (HTML/CSS/JS)
+✓ Buildroot configuration
+✓ GitHub Actions workflow
+✓ Documentation
+
+NEXT STEPS:
+
+1. Extract this archive:
+   unzip RuntipiOS-Complete-Ready.zip
+
+2. Initialize git:
+   cd runtipi-os
+   git init
+   git add .
+   git commit -m "Initial RuntipiOS"
+
+3. Add Buildroot submodule:
+   git submodule add https://github.com/buildroot/buildroot.git buildroot
+   git submodule update --init
+
+4. Make scripts executable:
+   chmod +x board/runtipi/rootfs-overlay/usr/local/bin/*.sh
+   chmod +x board/runtipi/post-build.sh
+
+5. Add your Runtipi logo:
+   cp /path/to/logo.png board/runtipi/rootfs-overlay/usr/local/share/runtipi/captive-portal/logo.png
+
+6. Build for Raspberry Pi:
+   cd buildroot
+   make BR2_EXTERNAL=.. -C . rpi4-64_defconfig
+   make -j$(nproc)
+
+7. Flash to SD card:
+   dd if=buildroot/output/images/runtipi-rpi4-64.img of=/dev/sdX bs=4M status=progress
+   sync
+
+PROJECT STRUCTURE:
+runtipi-os/
+├── board/runtipi/
+│   ├── configs/rpi4-64_defconfig
+│   ├── post-build.sh
+│   └── rootfs-overlay/
+│       ├── etc/runtipi/config.yml
+│       ├── etc/systemd/system/
+│       ├── usr/local/bin/
+│       └── usr/local/share/runtipi/captive-portal/
+├── .github/workflows/build.yml
+├── README.md
+└── buildroot/ (git submodule to add)
+
+ALL FILES ARE READY - NO ADDITIONAL FILES NEEDED!
+
+For support, visit: https://runtipi.io

@@ -1,2 +1,15 @@
-File: runtipi-network.service
-This file content should be extracted from the generated artifact.
+[Unit]
+Description=RuntipiOS Network Detection and Setup
+After=network-pre.target
+Before=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runtipi-network-setup.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

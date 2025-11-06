@@ -1,2 +1,52 @@
-File: captive-index.html
-This file content should be extracted from the generated artifact.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RuntipiOS Wi-Fi Setup</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="logo.png" alt="Runtipi Logo" class="logo" />
+      <h1 id="title">Welcome to RuntipiOS</h1>
+      <p id="subtitle">Wi-Fi Configuration</p>
+    </div>
+    <div class="content">
+      <p id="description">Please select your Wi-Fi network and enter the password to continue.</p>
+      <form id="wifi-form" onsubmit="return handleSubmit(event)">
+        <div class="form-group">
+          <label for="ssid" id="label-ssid">Wi-Fi Network:</label>
+          <select id="ssid" name="ssid" required>
+            <option value="">Scanning networks...</option>
+          </select>
+          <button type="button" id="scan-btn" class="scan-button" onclick="scanNetworks()">
+            <span id="scan-text">Scan Networks</span>
+          </button>
+        </div>
+        <div class="form-group">
+          <label for="password" id="label-password">Password:</label>
+          <div class="password-container">
+            <input type="password" id="password" name="password" placeholder="" />
+            <button type="button" class="toggle-password" onclick="togglePassword()">👁</button>
+          </div>
+        </div>
+        <button type="submit" id="submit-btn" class="submit-button">Connect</button>
+      </form>
+      <div id="status-container" class="status-hidden">
+        <p id="status" class="status-message"></p>
+      </div>
+      <div id="language-selector" class="language-selector">
+        <button onclick="setLanguage('en')" id="lang-en">English</button>
+        <button onclick="setLanguage('fr')" id="lang-fr">Français</button>
+      </div>
+    </div>
+    <footer id="footer">
+      <p id="footer-text">Powered by Runtipi</p>
+      <a href="https://runtipi.io" target="_blank" id="footer-link">Learn more</a>
+    </footer>
+  </div>
+  <script src="setup.js"></script>
+</body>
+</html>

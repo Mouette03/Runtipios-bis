@@ -1,2 +1,14 @@
-File: runtipi-motd.service
-This file content should be extracted from the generated artifact.
+[Unit]
+Description=RuntipiOS MOTD Generator
+After=runtipi-install.service
+Wants=runtipi-install.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runtipi-generate-motd.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
