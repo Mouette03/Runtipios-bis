@@ -13,8 +13,9 @@ BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
 
 # Kernel
 BR2_LINUX_KERNEL=y
-BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/raspberrypi/linux/archive/refs/heads/rpi-6.6.y.tar.gz"
+BR2_LINUX_KERNEL_CUSTOM_GIT=y
+BR2_LINUX_KERNEL_CUSTOM_REPO_URL="https://github.com/raspberrypi/linux"
+BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="rpi-6.6.y"
 BR2_LINUX_KERNEL_DEFCONFIG="bcm2712"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y
 BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2712-rpi-5-b"
@@ -82,7 +83,7 @@ BR2_PACKAGE_RUNTIPI=y
 BR2_ROOTFS_OVERLAY="board/runtipi/rootfs-overlay"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/runtipi/post-build.sh"
 BR2_ROOTFS_POST_IMAGE_SCRIPT="board/runtipi/post-image.sh support/scripts/genimage.sh"
-BR2_ROOTFS_POST_SCRIPT_ARGS="-c board/runtipi/genimage-rpi5.cfg"
+BR2_ROOTFS_POST_IMAGE_SCRIPT_ARGS="-c board/runtipi/genimage-rpi5.cfg"
 
 # genimage
 BR2_PACKAGE_HOST_GENIMAGE=y
