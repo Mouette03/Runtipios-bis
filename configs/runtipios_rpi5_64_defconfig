@@ -11,11 +11,10 @@ BR2_TARGET_GENERIC_HOSTNAME="runtipios"
 BR2_TARGET_GENERIC_ISSUE="Welcome to RuntipiOS"
 BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_EUDEV=y
 
-# Kernel
+# Kernel (aligné sur defconfig officiel: tarball spécifique commit)
 BR2_LINUX_KERNEL=y
-BR2_LINUX_KERNEL_CUSTOM_GIT=y
-BR2_LINUX_KERNEL_CUSTOM_REPO_URL="https://github.com/raspberrypi/linux"
-BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="rpi-6.10.y"
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,576cc10e1ed50a9eacffc7a05c796051d7343ea4)/linux-576cc10e1ed50a9eacffc7a05c796051d7343ea4.tar.gz"
 BR2_LINUX_KERNEL_DEFCONFIG="bcm2712"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y
 BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2712-rpi-5-b"
@@ -78,11 +77,10 @@ BR2_PACKAGE_PYTHON3=y
 # Custom packages
 BR2_PACKAGE_RUNTIPI=y
 
-# Post-build/image scripts
+# Post-build/image scripts (simplifiés comme upstream)
 BR2_ROOTFS_OVERLAY="board/runtipi/rootfs-overlay"
 BR2_ROOTFS_POST_BUILD_SCRIPT="board/runtipi/post-build.sh"
-BR2_ROOTFS_POST_IMAGE_SCRIPT="board/runtipi/post-image.sh support/scripts/genimage.sh"
-BR2_ROOTFS_POST_IMAGE_SCRIPT_ARGS="-c board/runtipi/genimage-rpi5.cfg"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="board/runtipi/post-image.sh"
 
 # genimage
 BR2_PACKAGE_HOST_GENIMAGE=y

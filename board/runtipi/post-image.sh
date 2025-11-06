@@ -48,4 +48,18 @@ echo "Boot configuration files created"
 echo "Files in output/images:"
 ls -lh "${BINARIES_DIR}/" | head -30
 
+echo "Running genimage..."
+GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
+if [ -f "${BINARIES_DIR}/bcm2712-rpi-5-b.dtb" ] && [ -f "${BOARD_DIR}/genimage-rpi5.cfg" ]; then
+    GENIMAGE_CFG="${BOARD_DIR}/genimage-rpi5.cfg"
+fi
+
+mkdir -p "${BINARIES_DIR}/genimage.tmp"
+genimage --rootpath "${BINARIES_DIR}/rootfs" \
+                 --tmppath "${BINARIES_DIR}/genimage.tmp" \
+                 --inputpath "${BINARIES_DIR}" \
+                 --outputpath "${BINARIES_DIR}" \
+                 --config "${GENIMAGE_CFG}"
+
+echo "genimage finished using ${GENIMAGE_CFG}"
 echo "=== Post-Image Script Completed ==="
