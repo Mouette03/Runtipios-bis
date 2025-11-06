@@ -19,7 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         board:
-          - runtipios_rpi4_64
+          # Temporarily build only RPi5 until RPi4 config is ready
+          # - runtipios_rpi4_64
           - runtipios_rpi5_64
 
     steps:
