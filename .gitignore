@@ -1,9 +1,7 @@
 /buildroot/
-buildroot/
 /output/
 *.img
 *.gz
 .vscode/
 .idea/
-*.swp
 *.log

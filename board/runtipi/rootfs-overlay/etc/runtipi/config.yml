@@ -1,4 +1,6 @@
 # RuntipiOS Configuration File
+# This file is used to configure RuntipiOS at build time and runtime
+
 hostname: "runtipi"
 
 network:

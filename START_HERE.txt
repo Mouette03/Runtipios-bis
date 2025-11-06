@@ -1,61 +1,43 @@
-RuntipiOS - Complete Project Archive
+RuntipiOS - Complete & Ready to Use!
 
-THIS ARCHIVE CONTAINS ALL FILES READY TO USE!
+TOUS LES FICHIERS SONT COMPLETS ET FONCTIONNELS!
 
-Files included:
-✓ All configuration files
-✓ All system scripts
-✓ Systemd services
-✓ Captive portal (HTML/CSS/JS)
-✓ Buildroot configuration
-✓ GitHub Actions workflow
-✓ Documentation
+✓ Tous les scripts shell (4 fichiers) - CODE COMPLET
+✓ Tous les services systemd (4 fichiers) - CODE COMPLET  
+✓ Portail captif multilingue (HTML/CSS/JS) - CODE COMPLET
+✓ Configuration Buildroot - CODE COMPLET
+✓ Post-build script - CODE COMPLET
+✓ GitHub Actions workflow - PRÊT
 
-NEXT STEPS:
+PROCHAINES ÉTAPES:
 
-1. Extract this archive:
-   unzip RuntipiOS-Complete-Ready.zip
-
-2. Initialize git:
+1. Extraire:
+   unzip RuntipiOS-Complete-Full.zip
    cd runtipi-os
+
+2. Initialiser git:
    git init
    git add .
    git commit -m "Initial RuntipiOS"
 
-3. Add Buildroot submodule:
+3. Ajouter Buildroot:
    git submodule add https://github.com/buildroot/buildroot.git buildroot
    git submodule update --init
 
-4. Make scripts executable:
+4. Permissions:
    chmod +x board/runtipi/rootfs-overlay/usr/local/bin/*.sh
    chmod +x board/runtipi/post-build.sh
 
-5. Add your Runtipi logo:
-   cp /path/to/logo.png board/runtipi/rootfs-overlay/usr/local/share/runtipi/captive-portal/logo.png
+5. Logo Runtipi:
+   cp runtipi-logo.png board/runtipi/rootfs-overlay/usr/local/share/runtipi/captive-portal/logo.png
 
-6. Build for Raspberry Pi:
+6. Compiler:
    cd buildroot
    make BR2_EXTERNAL=.. -C . rpi4-64_defconfig
    make -j$(nproc)
 
-7. Flash to SD card:
+7. Flasher:
    dd if=buildroot/output/images/runtipi-rpi4-64.img of=/dev/sdX bs=4M status=progress
    sync
 
-PROJECT STRUCTURE:
-runtipi-os/
-├── board/runtipi/
-│   ├── configs/rpi4-64_defconfig
-│   ├── post-build.sh
-│   └── rootfs-overlay/
-│       ├── etc/runtipi/config.yml
-│       ├── etc/systemd/system/
-│       ├── usr/local/bin/
-│       └── usr/local/share/runtipi/captive-portal/
-├── .github/workflows/build.yml
-├── README.md
-└── buildroot/ (git submodule to add)
-
-ALL FILES ARE READY - NO ADDITIONAL FILES NEEDED!
-
-For support, visit: https://runtipi.io
+C'EST PRÊT! Bon développement! 🚀
