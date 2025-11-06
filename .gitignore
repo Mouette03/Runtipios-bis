@@ -1,7 +1,0 @@
-/buildroot/
-/output/
-*.img
-*.gz
-.vscode/
-.idea/
-*.log

@@ -1,0 +1,98 @@
+#!/bin/bash
+# RuntipiOS WiFi Hotspot Management Script
+
+INTERFACE="wlan0"
+SSID="RuntipiOS-Setup"
+PASSWORD="runtipios2024"
+CHANNEL=6
+SUBNET="192.168.42"
+
+start_hotspot() {
+    echo "Starting WiFi hotspot: $SSID"
+    
+    # Stop conflicting services
+    systemctl stop wpa_supplicant 2>/dev/null || true
+    
+    # Configure interface
+    ip link set dev $INTERFACE down
+    ip addr flush dev $INTERFACE
+    ip addr add ${SUBNET}.1/24 dev $INTERFACE
+    ip link set dev $INTERFACE up
+    
+    # Configure hostapd
+    cat > /tmp/hostapd.conf << EOF
+interface=$INTERFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=g
+channel=$CHANNEL
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=$PASSWORD
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+country_code=FR
+EOF
+    
+    # Configure dnsmasq
+    cat > /tmp/dnsmasq.conf << EOF
+interface=$INTERFACE
+dhcp-range=${SUBNET}.10,${SUBNET}.250,255.255.255.0,24h
+dhcp-option=3,${SUBNET}.1
+dhcp-option=6,${SUBNET}.1
+server=8.8.8.8
+log-queries
+log-dhcp
+listen-address=${SUBNET}.1
+address=/#/${SUBNET}.1
+EOF
+    
+    # Start services
+    hostapd -B /tmp/hostapd.conf
+    dnsmasq -C /tmp/dnsmasq.conf
+    
+    # Start web portal
+    systemctl start lighttpd 2>/dev/null || true
+    
+    echo "Hotspot started successfully"
+    echo "Connect to: $SSID"
+    echo "Password: $PASSWORD"
+    echo "Web portal: http://${SUBNET}.1"
+}
+
+stop_hotspot() {
+    echo "Stopping WiFi hotspot"
+    
+    # Stop services
+    killall hostapd 2>/dev/null || true
+    killall dnsmasq 2>/dev/null || true
+    systemctl stop lighttpd 2>/dev/null || true
+    
+    # Reset interface
+    ip addr flush dev $INTERFACE
+    ip link set dev $INTERFACE down
+    
+    echo "Hotspot stopped"
+}
+
+case "$1" in
+    start)
+        start_hotspot
+        ;;
+    stop)
+        stop_hotspot
+        ;;
+    restart)
+        stop_hotspot
+        sleep 2
+        start_hotspot
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

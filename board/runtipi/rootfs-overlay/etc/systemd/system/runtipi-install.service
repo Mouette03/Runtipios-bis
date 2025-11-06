@@ -1,17 +1,17 @@
 [Unit]
-Description=RuntipiOS Automatic Runtipi Installation
-After=network-online.target runtipi-network.service
-Wants=network-online.target
-ConditionPathExists=!/etc/runtipi/installed
+Description=Runtipi Installation Service
+After=docker.service runtipios-setup.service
+Requires=docker.service
+ConditionPathExists=!/opt/runtipi/state/.installed
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/runtipi-install-runtipi.sh
+User=runtipi
+ExecStart=/usr/local/bin/runtipi-install
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
-User=runtipi
-Environment="HOME=/home/runtipi"
+TimeoutStartSec=600
 
 [Install]
 WantedBy=multi-user.target

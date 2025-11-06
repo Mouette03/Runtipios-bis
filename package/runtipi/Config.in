@@ -1,0 +1,13 @@
+config BR2_PACKAGE_RUNTIPI
+	bool "runtipi"
+	depends on BR2_PACKAGE_DOCKER_CLI
+	depends on BR2_PACKAGE_DOCKER_ENGINE
+	select BR2_PACKAGE_JQ
+	select BR2_PACKAGE_CURL
+	select BR2_PACKAGE_GIT
+	help
+	  Runtipi is a home server management system that lets you
+	  self-host services like Nextcloud, Jellyfin, and more with
+	  one-click installations.
+
+	  https://runtipi.io

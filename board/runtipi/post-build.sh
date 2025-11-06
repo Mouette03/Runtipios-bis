@@ -1,96 +1,111 @@
 #!/bin/bash
-# RuntipiOS Post-Build Script
+# Post-build script for RuntipiOS
+# This script is called after the root filesystem is built but before the image is created
+# Similar to Home Assistant OS approach
 
 set -e
 
 TARGET_DIR=$1
-BOARD_DIR=$2
 
-log() {
-    echo "[Post-Build] $1"
+echo "=== RuntipiOS Post-Build Script ==="
+
+# Create necessary directories
+mkdir -p "${TARGET_DIR}/opt/runtipi"
+mkdir -p "${TARGET_DIR}/data"
+mkdir -p "${TARGET_DIR}/mnt/boot"
+mkdir -p "${TARGET_DIR}/mnt/data"
+
+# Create runtipi user and group
+if ! grep -q "^runtipi:" "${TARGET_DIR}/etc/passwd"; then
+    echo "runtipi:x:1000:1000:Runtipi User:/opt/runtipi:/bin/bash" >> "${TARGET_DIR}/etc/passwd"
+    echo "runtipi:x:1000:" >> "${TARGET_DIR}/etc/group"
+    echo "runtipi:*:19000:0:99999:7:::" >> "${TARGET_DIR}/etc/shadow"
+fi
+
+# Set permissions for runtipi directories
+chown -R 1000:1000 "${TARGET_DIR}/opt/runtipi" 2>/dev/null || true
+chown -R 1000:1000 "${TARGET_DIR}/data" 2>/dev/null || true
+
+# Enable systemd services
+systemctl --root="${TARGET_DIR}" enable systemd-networkd.service || true
+systemctl --root="${TARGET_DIR}" enable systemd-resolved.service || true
+systemctl --root="${TARGET_DIR}" enable systemd-timesyncd.service || true
+systemctl --root="${TARGET_DIR}" enable sshd.service || true
+systemctl --root="${TARGET_DIR}" enable docker.service || true
+systemctl --root="${TARGET_DIR}" enable runtipios-setup.service || true
+systemctl --root="${TARGET_DIR}" enable runtipios-hotspot.service || true
+
+# Configure network
+mkdir -p "${TARGET_DIR}/etc/systemd/network"
+cat > "${TARGET_DIR}/etc/systemd/network/20-wired.network" << 'EOF'
+[Match]
+Name=eth* en*
+
+[Network]
+DHCP=yes
+MulticastDNS=yes
+
+[DHCP]
+UseDomains=yes
+RouteMetric=10
+EOF
+
+cat > "${TARGET_DIR}/etc/systemd/network/25-wireless.network" << 'EOF'
+[Match]
+Name=wlan*
+
+[Network]
+DHCP=yes
+MulticastDNS=yes
+
+[DHCP]
+UseDomains=yes
+RouteMetric=20
+EOF
+
+# Configure resolved
+mkdir -p "${TARGET_DIR}/etc/systemd/resolved.conf.d"
+cat > "${TARGET_DIR}/etc/systemd/resolved.conf.d/runtipios.conf" << 'EOF'
+[Resolve]
+MulticastDNS=yes
+LLMNR=yes
+EOF
+
+# Set default SSH configuration
+if [ -f "${TARGET_DIR}/etc/ssh/sshd_config" ]; then
+    sed -i 's/#PermitRootLogin.*/PermitRootLogin no/' "${TARGET_DIR}/etc/ssh/sshd_config"
+    sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' "${TARGET_DIR}/etc/ssh/sshd_config"
+fi
+
+# Configure Docker
+mkdir -p "${TARGET_DIR}/etc/docker"
+cat > "${TARGET_DIR}/etc/docker/daemon.json" << 'EOF'
+{
+  "log-driver": "journald",
+  "storage-driver": "overlay2",
+  "data-root": "/data/docker"
 }
+EOF
 
-log "Starting post-build customization..."
+# Set hostname
+echo "runtipios" > "${TARGET_DIR}/etc/hostname"
 
-log "Creating system directories..."
-mkdir -p "$TARGET_DIR/etc/runtipi"
-mkdir -p "$TARGET_DIR/var/log/runtipi"
-mkdir -p "$TARGET_DIR/home/runtipi/.config"
+# Configure hosts
+cat > "${TARGET_DIR}/etc/hosts" << 'EOF'
+127.0.0.1   localhost runtipios runtipios.local
+::1         localhost ip6-localhost ip6-loopback
+ff02::1     ip6-allnodes
+ff02::2     ip6-allrouters
+EOF
 
-chmod 755 "$TARGET_DIR/etc/runtipi"
-chmod 755 "$TARGET_DIR/var/log/runtipi"
-chown 1000:1000 "$TARGET_DIR/home/runtipi" 2>/dev/null || true
+# Set timezone (will be overridden by config.yml)
+ln -sf /usr/share/zoneinfo/Europe/Paris "${TARGET_DIR}/etc/localtime" || true
 
-if ! grep -q "^runtipi:" "$TARGET_DIR/etc/passwd"; then
-    log "Creating runtipi user..."
-    echo "runtipi:x:1000:1000:Runtipi User:/home/runtipi:/bin/bash" >> "$TARGET_DIR/etc/passwd"
-    echo "runtipi:x:1000:" >> "$TARGET_DIR/etc/group"
-    mkdir -p "$TARGET_DIR/home/runtipi"
-    chown 1000:1000 "$TARGET_DIR/home/runtipi" 2>/dev/null || true
-fi
+# Create version file
+cat > "${TARGET_DIR}/etc/runtipios-release" << EOF
+RUNTIPIOS_VERSION=1.0.0
+BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+BUILD_ID=${BUILD_ID:-unknown}
+EOF
 
-if [ -d "$TARGET_DIR/etc/sudoers.d" ]; then
-    cat > "$TARGET_DIR/etc/sudoers.d/runtipi" << 'SUDOERS'
-runtipi ALL=(ALL) NOPASSWD: ALL
-SUDOERS
-    chmod 0440 "$TARGET_DIR/etc/sudoers.d/runtipi"
-    log "Sudoers configuration added"
-fi
-
-log "Setting script permissions..."
-chmod +x "$TARGET_DIR/usr/local/bin/runtipi-"* 2>/dev/null || true
-chmod +x "$TARGET_DIR/usr/local/bin/"*.sh 2>/dev/null || true
-
-log "Setting up systemd..."
-mkdir -p "$TARGET_DIR/etc/systemd/system"
-mkdir -p "$TARGET_DIR/var/log/journal"
-
-log "Enabling RuntipiOS services..."
-mkdir -p "$TARGET_DIR/etc/systemd/system/multi-user.target.wants"
-
-ln -sf /etc/systemd/system/runtipi-network.service "$TARGET_DIR/etc/systemd/system/multi-user.target.wants/" 2>/dev/null || true
-ln -sf /etc/systemd/system/runtipi-install.service "$TARGET_DIR/etc/systemd/system/multi-user.target.wants/" 2>/dev/null || true
-ln -sf /etc/systemd/system/runtipi-motd.service "$TARGET_DIR/etc/systemd/system/multi-user.target.wants/" 2>/dev/null || true
-
-log "Setting hostname..."
-echo "runtipi" > "$TARGET_DIR/etc/hostname"
-
-log "Creating default MOTD..."
-cat > "$TARGET_DIR/etc/motd" << 'MOTD'
-╔════════════════════════════════════════════════════════════╗
-║                    Welcome to RuntipiOS                    ║
-║          Booting up... Runtipi will be ready shortly       ║
-╚════════════════════════════════════════════════════════════╝
-
-Waiting for system initialization...
-MOTD
-
-log "Setting up shell environment..."
-cat > "$TARGET_DIR/etc/profile.d/runtipi.sh" << 'PROFILE'
-export RUNTIPI_VERSION="1.0.0"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-if [ -x /usr/bin/tput ] && tput setaf 1 >/dev/null 2>&1; then
-    export LS_COLORS="di=01;34:ln=01;36:ex=01;32"
-    alias ls="ls --color=auto"
-fi
-PROFILE
-chmod 644 "$TARGET_DIR/etc/profile.d/runtipi.sh"
-
-log "Setting up log rotation..."
-cat > "$TARGET_DIR/etc/logrotate.d/runtipi" << 'LOGROTATE'
-/var/log/runtipi/*.log {
-    daily
-    missingok
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 644 runtipi runtipi
-    sharedscripts
-}
-LOGROTATE
-
-touch "$TARGET_DIR/etc/runtipi/first-boot"
-
-log "Post-build customization completed!"
+echo "=== Post-Build Script Completed ==="

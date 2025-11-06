@@ -1,0 +1,15 @@
+[Unit]
+Description=RuntipiOS WiFi Hotspot
+After=network.target
+Conflicts=wpa_supplicant.service
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/runtipios-hotspot start
+ExecStop=/usr/local/bin/runtipios-hotspot stop
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# RuntipiOS Boot Configuration
+# See https://www.raspberrypi.com/documentation/computers/config_txt.html
+
+# GPU Memory
+gpu_mem=128
+
+# Enable audio
+dtparam=audio=on
+
+# Enable I2C and SPI
+dtparam=i2c_arm=on
+dtparam=spi=on
+
+# Enable UART
+enable_uart=1
+
+# Disable splash screen
+disable_splash=1
+
+# Boot faster
+boot_delay=0
+disable_overscan=1
+
+# 64-bit mode
+arm_64bit=1
+
+# Kernel
+kernel=kernel8.img
+
+# Device Tree overlays
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+
+# Camera (disabled by default to save memory)
+start_x=0
+
+# Network boot (optional)
+# dtparam=act_led_trigger=none
+# dtparam=pwr_led_trigger=default-on
+
+# Overclocking (commented for safety, uncomment if needed)
+# over_voltage=2
+# arm_freq=1800
+# gpu_freq=500

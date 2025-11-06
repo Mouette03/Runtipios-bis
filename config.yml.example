@@ -1,0 +1,21 @@
+# RuntipiOS Configuration
+# Copy this file to the boot partition as config.yml and edit as needed
+
+# System configuration
+hostname: runtipios
+timezone: Europe/Paris
+locale: en_US.UTF-8
+keyboard: us
+
+# WiFi configuration
+wifi_country: FR
+wifi_ssid: "YourWiFiNetwork"
+wifi_password: "YourWiFiPassword"
+
+# User account
+username: runtipi
+password: changeme
+
+# Optional: Advanced settings
+# docker_root: /data/docker
+# runtipi_install_on_boot: true

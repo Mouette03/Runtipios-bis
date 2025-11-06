@@ -1,12 +1,12 @@
 [Unit]
-Description=RuntipiOS Network Detection and Setup
-After=network-pre.target
-Before=network-online.target
+Description=RuntipiOS First Boot Setup
+After=network-online.target
 Wants=network-online.target
+ConditionPathExists=!/etc/runtipios-configured
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/runtipi-network-setup.sh
+ExecStart=/usr/local/bin/runtipios-setup
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
