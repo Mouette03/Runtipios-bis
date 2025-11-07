@@ -13,9 +13,14 @@ if [ -z "${BINARIES_DIR}" ]; then
     exit 1
 fi
 
+# Calculate TARGET_DIR (Buildroot doesn't pass it to post-image scripts)
+TARGET_DIR="$(dirname ${BINARIES_DIR})/target"
+
 echo "=== RuntipiOS Post-Image Script (Raspberry Pi 4) ==="
 echo "BINARIES_DIR: ${BINARIES_DIR}"
+echo "TARGET_DIR: ${TARGET_DIR}"
 echo "BOARD_DIR: ${BOARD_DIR}"
+echo "PWD: $(pwd)"
 
 # Create cmdline.txt
 cat > "${BINARIES_DIR}/cmdline.txt" << 'EOF'
