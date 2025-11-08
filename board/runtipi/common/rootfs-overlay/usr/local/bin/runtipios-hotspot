@@ -16,6 +16,21 @@ start_hotspot() {
         exit 1
     fi
     
+    # Check if Ethernet is connected (eth0 or end0)
+    ETH_CONNECTED=false
+    for eth_if in eth0 end0; do
+        if ip link show $eth_if 2>/dev/null | grep -q "state UP"; then
+            echo "Ethernet interface $eth_if is connected"
+            ETH_CONNECTED=true
+            break
+        fi
+    done
+    
+    if [ "$ETH_CONNECTED" = false ]; then
+        echo "Warning: No Ethernet connection detected. Hotspot may not provide internet access."
+        # Continue anyway for captive portal functionality
+    fi
+    
     # Stop conflicting services
     systemctl stop wpa_supplicant 2>/dev/null || true
     
