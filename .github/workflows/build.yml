@@ -61,6 +61,7 @@ jobs:
       - name: Build image
         run: |
           cd buildroot
+          export BR2_EXTERNAL=$(pwd)/..
           echo "Building RuntipiOS for ${{ matrix.board }}..."
           make -j$(nproc) 2>&1 | tee build.log
           echo "Build completed!"
