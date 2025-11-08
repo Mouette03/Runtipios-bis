@@ -10,6 +10,12 @@ SUBNET="192.168.42"
 start_hotspot() {
     echo "Starting WiFi hotspot: $SSID"
     
+    # Check if interface exists
+    if ! ip link show $INTERFACE &>/dev/null; then
+        echo "Error: Interface $INTERFACE not found"
+        exit 1
+    fi
+    
     # Stop conflicting services
     systemctl stop wpa_supplicant 2>/dev/null || true
     

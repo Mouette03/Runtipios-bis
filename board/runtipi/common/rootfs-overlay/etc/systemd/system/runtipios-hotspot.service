@@ -2,6 +2,7 @@
 Description=RuntipiOS WiFi Hotspot
 After=network.target
 Conflicts=wpa_supplicant.service
+ConditionPathExists=!/etc/wpa_supplicant/wpa_supplicant.conf
 
 [Service]
 Type=forking
