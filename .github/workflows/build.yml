@@ -30,8 +30,18 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
+          
+          # Install genimage from source (not available in Ubuntu repos)
+          git clone https://github.com/pengutronix/genimage.git /tmp/genimage
+          cd /tmp/genimage
+          sudo apt-get install -y autoconf automake libtool pkg-config libconfuse-dev
+          ./autogen.sh
+          ./configure
+          make
+          sudo make install
+          
           sudo apt-get install -y \
-          genimage dosfstools mtools qemu-user-static \
+            dosfstools mtools qemu-user-static \
             build-essential git curl wget bc rsync \
             binutils bison flex unzip libssl-dev libffi-dev \
             perl python3 cpio patchelf file lzop \
