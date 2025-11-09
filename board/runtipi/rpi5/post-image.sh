@@ -32,7 +32,7 @@ if [ -f "${BOARD_DIR}/config_rpi5.txt" ]; then
     cp "${BOARD_DIR}/config_rpi5.txt" "${BINARIES_DIR}/config.txt"
     echo "Copied RPi5 config.txt"
 else
-    echo "Error: RPi5 config.txt not found!"
+    echo "Error: RPi5 config.txt not found! (Expected at ${BOARD_DIR}/config_rpi5.txt)"
     exit 1
 fi
 
@@ -57,9 +57,15 @@ genimage \
     --tmppath "${GENIMAGE_TMP}" \
     --inputpath "${BINARIES_DIR}" \
     --outputpath "${BINARIES_DIR}" \
-    --config "${GENIMAGE_CFG}"
+    --config "${GENIMAGE_CFG}" 2>&1 | tee "${BINARIES_DIR}/genimage.log"
+rc=$?
+if [ $rc -ne 0 ]; then
+    echo "genimage FAILED (rc=$rc). See ${BINARIES_DIR}/genimage.log"
+    exit $rc
+fi
 
 echo "genimage finished successfully"
+
 echo "Generated files:"
 ls -lh "${BINARIES_DIR}/"*.img 2>/dev/null || echo "No .img files found"
 echo "=== Post-Image Script Completed ==="

@@ -31,6 +31,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
+          genimage dosfstools mtools qemu-user-static \
             build-essential git curl wget bc rsync \
             binutils bison flex unzip libssl-dev libffi-dev \
             perl python3 cpio patchelf file lzop \
@@ -65,6 +66,14 @@ jobs:
           echo "Building RuntipiOS for ${{ matrix.board }}..."
           make -j$(nproc) 2>&1 | tee build.log
           echo "Build completed!"
+
+          # Debug: list generated images and sizes
+          echo "=== Debug: listing buildroot/output/images ==="
+          ls -lah buildroot/output/images || true
+          echo "=== Debug: show rootfs and sdcard ==="
+          if [ -f buildroot/output/images/rootfs.ext2 ]; then ls -lh buildroot/output/images/rootfs.ext2; fi
+          if [ -f buildroot/output/images/sdcard.img ]; then ls -lh buildroot/output/images/sdcard.img; fi
+
           
           # List generated images for debugging
           echo "=== Generated images ==="
@@ -78,6 +87,9 @@ jobs:
           # Check what was generated
           echo "=== Checking build output ==="
           ls -lh buildroot/output/images/
+
+          # Create an archive of output/images for debug (always)
+          tar -czf artifacts/images-debug.tar.gz -C buildroot output/images || true
           
           # Copy the SD card image if it exists
           if [ -f buildroot/output/images/sdcard.img ]; then
@@ -89,7 +101,9 @@ jobs:
             gzip -9 artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
             
             echo "Image packaged successfully:"
-            ls -lh artifacts/*.img.gz
+            ls -lh artifacts/*.img.gz || true
+            if [ -f buildroot/output/images/genimage.log ]; then cp buildroot/output/images/genimage.log artifacts/genimage.log; fi
+            ls -lh artifacts/* || true
           else
             echo "ERROR: sdcard.img not found!"
             echo "Available files:"
