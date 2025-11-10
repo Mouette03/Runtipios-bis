@@ -60,15 +60,19 @@ sudo dd if=output/runtipios-rpi5-*.img of=/dev/sdX bs=4M status=progress conv=fs
 ### First Boot
 
 1. Insert SD card and power on
-2. **If Ethernet connected**: System uses wired network (hotspot disabled)
-   - Access device at `http://runtipios.local`
-   - Runtipi ready to install
-3. **If no Ethernet**: WiFi hotspot starts automatically: **RuntipiOS-Setup**
+2. **If Ethernet connected**: 
+   - System uses wired network
+   - Runtipi installs automatically (wait 5-10 minutes)
+   - Access at `http://runtipios.local` when ready
+3. **If no Ethernet**: WiFi hotspot starts: **RuntipiOS-Setup**
    - Connect to hotspot (password: `runtipios2024`)
    - Open browser → automatic redirect to setup portal
    - Configure WiFi credentials
    - Device reboots and connects to your network
-4. Access Runtipi at `http://runtipios.local` or device IP
+   - Runtipi installs automatically after connection
+4. Login via SSH: `ssh runtipi@runtipios.local` (password: `runtipi`)
+5. Check installation: `systemctl status runtipi-install`
+6. Access Runtipi at `http://runtipios.local` when installation completes
 
 ## 📁 Project Structure
 

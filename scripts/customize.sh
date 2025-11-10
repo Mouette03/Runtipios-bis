@@ -174,8 +174,20 @@ create_default_user() {
 if ! id -u ${RUNTIPIOS_DEFAULT_USER} &>/dev/null; then
     useradd -m -s /bin/bash -G sudo,adm,dialout,cdrom,audio,video,plugdev,games,users,input,netdev,spi,i2c,gpio ${RUNTIPIOS_DEFAULT_USER}
     echo "${RUNTIPIOS_DEFAULT_USER}:${RUNTIPIOS_DEFAULT_PASSWORD}" | chpasswd
+    
+    # Allow sudo without password
+    echo "${RUNTIPIOS_DEFAULT_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/010_${RUNTIPIOS_DEFAULT_USER}
+    chmod 0440 /etc/sudoers.d/010_${RUNTIPIOS_DEFAULT_USER}
 fi
 EOF
+
+    # Copy .bashrc if exists in overlays
+    if [ -f "${SCRIPT_DIR}/platforms/common/overlays/home/runtipi/.bashrc" ]; then
+        cp "${SCRIPT_DIR}/platforms/common/overlays/home/runtipi/.bashrc" \
+           "${MOUNT_ROOT}/home/${RUNTIPIOS_DEFAULT_USER}/.bashrc"
+        chroot "${MOUNT_ROOT}" chown ${RUNTIPIOS_DEFAULT_USER}:${RUNTIPIOS_DEFAULT_USER} \
+           /home/${RUNTIPIOS_DEFAULT_USER}/.bashrc
+    fi
 
     log_success "User created"
 }
@@ -211,12 +223,13 @@ enable_services() {
 # Enable RuntipiOS services
 systemctl enable runtipios-setup.service
 systemctl enable runtipios-hotspot.service
-
-# Enable Docker
-systemctl enable docker
+systemctl enable runtipi-install.service
 
 # Enable Avahi for .local resolution
 systemctl enable avahi-daemon
+
+# Enable SSH
+systemctl enable ssh
 
 # Disable unnecessary services
 systemctl disable apt-daily.timer
@@ -238,8 +251,36 @@ configure_boot() {
         cp "${SCRIPT_DIR}/platforms/${PLATFORM}/config/config.txt" "${MOUNT_BOOT}/"
     fi
     
-    # Create firstrun.sh for SSH enablement
+    # Enable SSH
     touch "${MOUNT_BOOT}/ssh"
+    
+    # Create welcome message
+    cat > "${MOUNT_ROOT}/etc/motd" << 'EOF'
+╔═══════════════════════════════════════════════════════════════╗
+║                      Welcome to RuntipiOS!                    ║
+║                                                               ║
+║  Lightweight Linux distribution for running Runtipi          ║
+║                                                               ║
+║  Default login: runtipi / runtipi                            ║
+║                                                               ║
+║  Runtipi will install automatically when internet is         ║
+║  detected (Ethernet or WiFi).                                ║
+║                                                               ║
+║  Access web interface after installation:                    ║
+║    http://runtipios.local                                    ║
+║    http://YOUR_IP_ADDRESS                                    ║
+║                                                               ║
+║  WiFi Setup (if no Ethernet):                                ║
+║    1. Connect to hotspot: RuntipiOS-Setup                    ║
+║    2. Password: runtipios2024                                ║
+║    3. Configure WiFi via web portal                          ║
+║    4. Runtipi installs automatically after connection        ║
+║                                                               ║
+║  Check installation status:                                  ║
+║    systemctl status runtipi-install                          ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+EOF
     
     log_success "Boot configured"
 }

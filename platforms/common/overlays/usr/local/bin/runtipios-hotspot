@@ -33,14 +33,24 @@ start_hotspot() {
     
     echo "No Ethernet detected, activating WiFi hotspot"
     
+    # Unblock WiFi if blocked
+    rfkill unblock wifi 2>/dev/null || true
+    
     # Stop conflicting services
     systemctl stop wpa_supplicant@wlan0 2>/dev/null || true
+    systemctl stop dhcpcd 2>/dev/null || true
+    
+    # Kill any existing processes
+    killall wpa_supplicant 2>/dev/null || true
+    killall dhcpcd 2>/dev/null || true
     
     # Configure interface
     ip link set dev $INTERFACE down
+    sleep 1
     ip addr flush dev $INTERFACE
     ip addr add ${SUBNET}.1/24 dev $INTERFACE
     ip link set dev $INTERFACE up
+    sleep 2
     
     # Configure hostapd
     cat > /etc/hostapd/hostapd.conf << EOF
