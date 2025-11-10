@@ -12,9 +12,6 @@ jobs:
     runs-on: ubuntu-22.04
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
       - name: Maximize build disk space
         uses: easimon/maximize-build-space@master
         with:
@@ -23,6 +20,9 @@ jobs:
           remove-haskell: 'true'
           remove-codeql: 'true'
           remove-docker-images: 'true'
+      
+      - name: Checkout code
+        uses: actions/checkout@v4
       
       - name: Install dependencies
         run: |
@@ -42,11 +42,12 @@ jobs:
       
       - name: Make scripts executable
         run: |
-          chmod +x build.sh
-          chmod +x platforms/*/build-*.sh
-          chmod +x scripts/*.sh
-          chmod +x platforms/common/overlays/usr/local/bin/*
-          chmod +x platforms/common/overlays/var/www/cgi-bin/*
+          chmod +x ./build.sh
+          chmod +x ./platforms/*/build-*.sh
+          chmod +x ./scripts/*.sh
+          chmod +x ./platforms/common/overlays/usr/local/bin/*
+          chmod +x ./platforms/common/overlays/var/www/cgi-bin/*
+          ls -la build.sh
       
       - name: Build RuntipiOS for Raspberry Pi 5
         run: sudo ./build.sh rpi5
