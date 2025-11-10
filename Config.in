@@ -1,6 +1,0 @@
-# RuntipiOS - BR2_EXTERNAL Configuration
-#
-# This file defines the external configuration options for RuntipiOS
-# Additional packages and configuration can be added here
-
-source "$BR2_EXTERNAL_RUNTIPIOS_PATH/package/runtipi/Config.in"
