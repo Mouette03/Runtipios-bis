@@ -1,0 +1,17 @@
+[Unit]
+Description=RuntipiOS WiFi Hotspot (only if no Ethernet)
+After=network-online.target
+Wants=network-online.target
+Conflicts=wpa_supplicant@wlan0.service
+ConditionPathExists=!/etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/runtipios-hotspot start
+ExecStop=/usr/local/bin/runtipios-hotspot stop
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+# Build artifacts
+build/
+output/
+downloads/
+artifacts/
+
+# Image files
+*.img
+*.img.xz
+*.img.gz
+*.img.zst
+
+# Loop devices and mounts
+*.loop
+mnt/
+
+# Temporary files
+*.tmp
+*.log
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

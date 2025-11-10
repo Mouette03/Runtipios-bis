@@ -1,0 +1,28 @@
+#!/bin/bash
+# Runtipi Installation Script
+
+set -e
+
+RUNTIPI_DIR="/opt/runtipi"
+STATE_DIR="$RUNTIPI_DIR/state"
+INSTALL_FLAG="$STATE_DIR/.installed"
+
+# Exit if already installed
+[ -f "$INSTALL_FLAG" ] && exit 0
+
+echo "=== Installing Runtipi ==="
+
+mkdir -p "$RUNTIPI_DIR"
+cd "$RUNTIPI_DIR"
+
+# Install Runtipi using official installer
+curl -L https://setup.runtipi.io | bash
+
+# Mark as installed
+mkdir -p "$STATE_DIR"
+touch "$INSTALL_FLAG"
+
+echo ""
+echo "=== Runtipi installed! ==="
+echo "Access at: http://$(hostname -I | awk '{print $1}')"
+echo ""

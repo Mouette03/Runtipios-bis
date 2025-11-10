@@ -2,172 +2,57 @@ name: "Build RuntipiOS"
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      buildroot_version:
-        description: "Buildroot version/branch"
-        default: "2024.08.x"
-        required: false
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        board:
-          # Temporarily build only RPi5 until RPi4 config is ready
-          # - runtipios_rpi4_64
-          - runtipios_rpi5_64
-
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update -qq
-          
-          # Install genimage from source (not available in Ubuntu repos)
-          git clone https://github.com/pengutronix/genimage.git /tmp/genimage
-          cd /tmp/genimage
-          sudo apt-get install -y autoconf automake libtool pkg-config libconfuse-dev
-          ./autogen.sh
-          ./configure
-          make
-          sudo make install
-          
-          sudo apt-get install -y \
-            dosfstools mtools qemu-user-static \
-            build-essential git curl wget bc rsync \
-            binutils bison flex unzip libssl-dev libffi-dev \
-            perl python3 cpio patchelf file lzop \
-            device-tree-compiler u-boot-tools
-
-      - name: Clone Buildroot
-        run: |
-          BUILDROOT_VERSION="${{ github.event.inputs.buildroot_version || '2024.08.x' }}"
-          git clone --depth=1 --branch "$BUILDROOT_VERSION" \
-            https://github.com/buildroot/buildroot.git buildroot
-
-      - name: Cache Buildroot downloads
-        uses: actions/cache@v4
+      
+      - name: Maximize build disk space
+        uses: easimon/maximize-build-space@master
         with:
-          path: buildroot/dl
-          key: buildroot-dl-${{ runner.os }}-${{ matrix.board }}-${{ hashFiles('configs/*_defconfig') }}
-          restore-keys: |
-            buildroot-dl-${{ runner.os }}-${{ matrix.board }}-
-            buildroot-dl-${{ runner.os }}-
-
-      - name: Configure Buildroot
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+      
+      - name: Install dependencies
         run: |
-          cd buildroot
-          export BR2_EXTERNAL=$(pwd)/..
-          make ${{ matrix.board }}_defconfig
-          echo "Configuration loaded successfully"
-
-      - name: Build image
-        run: |
-          cd buildroot
-          export BR2_EXTERNAL=$(pwd)/..
-          echo "Building RuntipiOS for ${{ matrix.board }}..."
-          make -j$(nproc) 2>&1 | tee build.log
-          echo "Build completed!"
-
-          # Debug: list generated images and sizes
-          echo "=== Debug: listing buildroot/output/images ==="
-          ls -lah buildroot/output/images || true
-          echo "=== Debug: show rootfs and sdcard ==="
-          if [ -f buildroot/output/images/rootfs.ext2 ]; then ls -lh buildroot/output/images/rootfs.ext2; fi
-          if [ -f buildroot/output/images/sdcard.img ]; then ls -lh buildroot/output/images/sdcard.img; fi
-
-          
-          # List generated images for debugging
-          echo "=== Generated images ==="
-          ls -lh output/images/
-
+          sudo apt-get update
+          sudo apt-get install -y \
+            wget \
+            xz-utils \
+            gzip \
+            zstd \
+            qemu-user-static \
+            binfmt-support \
+            debootstrap \
+            parted \
+            kpartx \
+            dosfstools \
+            e2fsprogs
+      
+      - name: Build RuntipiOS for Raspberry Pi 5
+        run: sudo ./build.sh rpi5
+      
       - name: Package artifacts
-        if: success()
         run: |
           mkdir -p artifacts
-          
-          # Check what was generated
-          echo "=== Checking build output ==="
-          ls -lh buildroot/output/images/
-
-          # Create an archive of output/images for debug (always)
-          tar -czf artifacts/images-debug.tar.gz -C buildroot output/images || true
-          
-          # Copy the SD card image if it exists
-          if [ -f buildroot/output/images/sdcard.img ]; then
-            echo "Found sdcard.img, packaging..."
-            cp buildroot/output/images/sdcard.img artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
-            
-            # Compress the image
-            echo "Compressing image..."
-            gzip -9 artifacts/runtipios-${{ matrix.board }}-${{ github.run_number }}.img
-            
-            echo "Image packaged successfully:"
-            ls -lh artifacts/*.img.gz || true
-            if [ -f buildroot/output/images/genimage.log ]; then cp buildroot/output/images/genimage.log artifacts/genimage.log; fi
-            ls -lh artifacts/* || true
-          else
-            echo "ERROR: sdcard.img not found!"
-            echo "Available files:"
-            find buildroot/output/images -type f
-            exit 1
-          fi
-          
-          # Copy build info
-          cat > artifacts/build-info.txt << EOF
-          RuntipiOS Build Information
-          ===========================
-          Board: ${{ matrix.board }}
-          Build Number: ${{ github.run_number }}
-          Commit: ${{ github.sha }}
-          Date: $(date -u)
-          Buildroot Version: ${{ github.event.inputs.buildroot_version || '2024.08.x' }}
-          EOF
-          
-          echo "=== Final artifacts ==="
+          cp -v output/*.img.* artifacts/ || true
           ls -lh artifacts/
-
+      
       - name: Upload build artifacts
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: runtipios-${{ matrix.board }}
-          path: |
-            artifacts/*.img.gz
-            artifacts/build-info.txt
-          retention-days: 30
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log-${{ matrix.board }}
-          path: buildroot/build.log
+          name: runtipios-images
+          path: artifacts/*.img.*
           retention-days: 7
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') && success()
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/*
-          body: |
-            RuntipiOS Release - ${{ matrix.board }}
-            
-            **Flash instructions:**
-            ```bash
-            # Download the .img.gz file
-            # Flash to SD card:
-            gunzip -c runtipios-*.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
-            ```
-            
-            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

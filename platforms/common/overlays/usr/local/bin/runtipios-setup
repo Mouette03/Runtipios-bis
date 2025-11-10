@@ -1,0 +1,71 @@
+#!/bin/bash
+# RuntipiOS First Boot Setup Script
+
+set -e
+
+CONFIG_FILE="/boot/firmware/config.yml"
+CONFIGURED_FLAG="/etc/runtipios-configured"
+
+# Exit if already configured
+[ -f "$CONFIGURED_FLAG" ] && exit 0
+
+echo "=== RuntipiOS First Boot Setup ==="
+
+# Function to read config.yml
+read_config() {
+    local key=$1
+    grep "^${key}:" "$CONFIG_FILE" 2>/dev/null | sed "s/^${key}:[[:space:]]*//" | tr -d '"' | tr -d "'"
+}
+
+# Check if config.yml exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "No custom configuration found, using defaults"
+    touch "$CONFIGURED_FLAG"
+    exit 0
+fi
+
+# Read configuration
+HOSTNAME=$(read_config "hostname")
+TIMEZONE=$(read_config "timezone")
+WIFI_COUNTRY=$(read_config "wifi_country")
+WIFI_SSID=$(read_config "wifi_ssid")
+WIFI_PASSWORD=$(read_config "wifi_password")
+
+# Set hostname
+if [ -n "$HOSTNAME" ]; then
+    echo "Setting hostname to: $HOSTNAME"
+    hostnamectl set-hostname "$HOSTNAME"
+    sed -i "s/runtipios/$HOSTNAME/g" /etc/hosts
+fi
+
+# Set timezone
+if [ -n "$TIMEZONE" ]; then
+    echo "Setting timezone to: $TIMEZONE"
+    timedatectl set-timezone "$TIMEZONE"
+fi
+
+# Configure WiFi if specified
+if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
+    echo "Configuring WiFi: $WIFI_SSID"
+    
+    cat > /etc/wpa_supplicant/wpa_supplicant-wlan0.conf << EOF
+ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+update_config=1
+country=${WIFI_COUNTRY:-FR}
+
+network={
+    ssid="$WIFI_SSID"
+    psk="$WIFI_PASSWORD"
+    key_mgmt=WPA-PSK
+}
+EOF
+    
+    chmod 600 /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+    systemctl enable wpa_supplicant@wlan0
+    systemctl start wpa_supplicant@wlan0
+fi
+
+# Mark as configured
+touch "$CONFIGURED_FLAG"
+echo "First boot setup completed!"
