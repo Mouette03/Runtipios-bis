@@ -43,7 +43,7 @@ start_hotspot() {
     ip link set dev $INTERFACE up
     
     # Configure hostapd
-    cat > /tmp/hostapd.conf << EOF
+    cat > /etc/hostapd/hostapd.conf << EOF
 interface=$INTERFACE
 driver=nl80211
 ssid=$SSID
@@ -56,25 +56,37 @@ ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=$PASSWORD
 wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
+wpa_pairwise=CCMP
 rsn_pairwise=CCMP
 country_code=FR
+ieee80211n=1
+ieee80211d=1
 EOF
     
     # Configure dnsmasq
-    cat > /tmp/dnsmasq-hotspot.conf << EOF
+    cat > /etc/dnsmasq.d/hotspot.conf << EOF
 interface=$INTERFACE
+bind-interfaces
 dhcp-range=${SUBNET}.10,${SUBNET}.250,255.255.255.0,24h
 dhcp-option=3,${SUBNET}.1
 dhcp-option=6,${SUBNET}.1
 server=8.8.8.8
 listen-address=${SUBNET}.1
 address=/#/${SUBNET}.1
+no-resolv
+log-queries
+log-dhcp
 EOF
     
     # Start services
-    hostapd -B /tmp/hostapd.conf
-    dnsmasq -C /tmp/dnsmasq-hotspot.conf
+    echo "Starting hostapd..."
+    hostapd -B /etc/hostapd/hostapd.conf
+    sleep 2
+    
+    echo "Starting dnsmasq..."
+    dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf
+    
+    echo "Starting web server..."
     systemctl start lighttpd 2>/dev/null || true
     
     echo "Hotspot started: $SSID / $PASSWORD"
@@ -86,8 +98,10 @@ stop_hotspot() {
     killall hostapd 2>/dev/null || true
     killall dnsmasq 2>/dev/null || true
     systemctl stop lighttpd 2>/dev/null || true
-    ip addr flush dev $INTERFACE
-    ip link set dev $INTERFACE down
+    rm -f /etc/hostapd/hostapd.conf
+    rm -f /etc/dnsmasq.d/hotspot.conf
+    ip addr flush dev $INTERFACE 2>/dev/null || true
+    ip link set dev $INTERFACE down 2>/dev/null || true
 }
 
 case "$1" in

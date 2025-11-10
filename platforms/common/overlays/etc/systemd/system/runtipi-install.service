@@ -1,12 +1,11 @@
 [Unit]
 Description=Runtipi Installation Service
-After=network-online.target docker.service runtipios-setup.service
+After=network-online.target runtipios-setup.service
 Wants=network-online.target
-Requires=docker.service
-ConditionPathExists=!/opt/runtipi/state/.installed
 
 [Service]
 Type=oneshot
+User=runtipi
 ExecStart=/usr/local/bin/runtipi-install
 RemainAfterExit=yes
 StandardOutput=journal

@@ -3,23 +3,21 @@
 
 set -e
 
-RUNTIPI_DIR="/opt/runtipi"
-STATE_DIR="$RUNTIPI_DIR/state"
-INSTALL_FLAG="$STATE_DIR/.installed"
+RUNTIPI_DIR="$HOME/runtipi"
+INSTALL_FLAG="$HOME/.runtipi-installed"
 
 # Exit if already installed
-[ -f "$INSTALL_FLAG" ] && exit 0
+if [ -f "$INSTALL_FLAG" ]; then
+    echo "Runtipi already installed"
+    exit 0
+fi
 
 echo "=== Installing Runtipi ==="
 
-mkdir -p "$RUNTIPI_DIR"
-cd "$RUNTIPI_DIR"
-
-# Install Runtipi using official installer
+# Install Runtipi using official installer (runs as user 'runtipi')
 curl -L https://setup.runtipi.io | bash
 
 # Mark as installed
-mkdir -p "$STATE_DIR"
 touch "$INSTALL_FLAG"
 
 echo ""

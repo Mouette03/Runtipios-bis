@@ -163,6 +163,44 @@ configure_locale() {
 }
 
 #==============================================================================
+# Create default user
+#==============================================================================
+
+create_default_user() {
+    log_info "Creating default user: ${RUNTIPIOS_DEFAULT_USER}..."
+    
+    chroot "${MOUNT_ROOT}" /bin/bash << EOF
+# Create user if it doesn't exist
+if ! id -u ${RUNTIPIOS_DEFAULT_USER} &>/dev/null; then
+    useradd -m -s /bin/bash -G sudo,adm,dialout,cdrom,audio,video,plugdev,games,users,input,netdev,spi,i2c,gpio ${RUNTIPIOS_DEFAULT_USER}
+    echo "${RUNTIPIOS_DEFAULT_USER}:${RUNTIPIOS_DEFAULT_PASSWORD}" | chpasswd
+fi
+EOF
+
+    log_success "User created"
+}
+
+#==============================================================================
+# Configure autologin
+#==============================================================================
+
+configure_autologin() {
+    log_info "Configuring autologin for ${RUNTIPIOS_DEFAULT_USER}..."
+    
+    # Create autologin directory
+    mkdir -p "${MOUNT_ROOT}/etc/systemd/system/getty@tty1.service.d"
+    
+    # Create autologin override
+    cat > "${MOUNT_ROOT}/etc/systemd/system/getty@tty1.service.d/autologin.conf" << EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin ${RUNTIPIOS_DEFAULT_USER} --noclear %I \$TERM
+EOF
+
+    log_success "Autologin configured"
+}
+
+#==============================================================================
 # Enable services
 #==============================================================================
 
@@ -211,9 +249,13 @@ configure_boot() {
 #==============================================================================
 
 create_data_directory() {
-    log_info "Creating /data directory..."
+    log_info "Creating required directories..."
     mkdir -p "${MOUNT_ROOT}/data"
     chmod 755 "${MOUNT_ROOT}/data"
+    
+    # Create hostapd and dnsmasq config directories
+    mkdir -p "${MOUNT_ROOT}/etc/hostapd"
+    mkdir -p "${MOUNT_ROOT}/etc/dnsmasq.d"
 }
 
 #==============================================================================
@@ -225,6 +267,8 @@ install_packages
 apply_overlays
 configure_hostname
 configure_locale
+create_default_user
+configure_autologin
 enable_services
 configure_boot
 create_data_directory
