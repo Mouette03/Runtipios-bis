@@ -40,6 +40,14 @@ jobs:
             dosfstools \
             e2fsprogs
       
+      - name: Make scripts executable
+        run: |
+          chmod +x build.sh
+          chmod +x platforms/*/build-*.sh
+          chmod +x scripts/*.sh
+          chmod +x platforms/common/overlays/usr/local/bin/*
+          chmod +x platforms/common/overlays/var/www/cgi-bin/*
+      
       - name: Build RuntipiOS for Raspberry Pi 5
         run: sudo ./build.sh rpi5
       
