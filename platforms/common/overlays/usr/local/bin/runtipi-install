@@ -1,48 +1,86 @@
 #!/bin/bash
 # Runtipi Auto-Installation Script
 
-set -e
-
 RUNTIPI_DIR="$HOME/runtipi"
 INSTALL_FLAG="$HOME/.runtipi-installed"
+LOG_FILE="/tmp/runtipi-install.log"
+
+# Function to log with timestamp
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
 
 # Exit if already installed
 if [ -f "$INSTALL_FLAG" ]; then
-    echo "Runtipi already installed at $RUNTIPI_DIR"
+    log "Runtipi already installed at $RUNTIPI_DIR"
     exit 0
 fi
 
-echo "========================================="
-echo "  Runtipi Auto-Installation Starting"
-echo "========================================="
-echo ""
+log "========================================="
+log "  Runtipi Auto-Installation Starting"
+log "========================================="
 
-# Wait for internet (double check)
-echo "Checking internet connectivity..."
-if ! ping -c 3 8.8.8.8 &>/dev/null; then
-    echo "ERROR: No internet connection detected"
+# Wait for internet (double check with timeout)
+log "Checking internet connectivity..."
+MAX_TRIES=12
+TRIES=0
+
+while [ $TRIES -lt $MAX_TRIES ]; do
+    if ping -c 1 -W 2 8.8.8.8 &>/dev/null || ping -c 1 -W 2 1.1.1.1 &>/dev/null; then
+        log "Internet connection confirmed!"
+        break
+    fi
+    TRIES=$((TRIES + 1))
+    log "Attempt $TRIES/$MAX_TRIES - Waiting for internet..."
+    sleep 10
+done
+
+if [ $TRIES -eq $MAX_TRIES ]; then
+    log "ERROR: No internet connection after $MAX_TRIES attempts"
+    log "Installation will retry on next boot"
     exit 1
 fi
 
-echo "Internet connection confirmed!"
-echo ""
+# Additional wait to ensure network is fully ready
+log "Waiting 10 seconds for network stabilization..."
+sleep 10
 
-# Install Runtipi using official installer (runs as user 'runtipi')
-echo "Downloading and installing Runtipi..."
-echo "This may take several minutes..."
-echo ""
+# Install Runtipi using official installer
+log "Downloading and installing Runtipi..."
+log "This will install Docker, Docker Compose, and Runtipi"
+log "This may take 10-30 minutes depending on your connection..."
+log "Installation log: $LOG_FILE"
 
-curl -L https://setup.runtipi.io | bash
-
-# Mark as installed
-touch "$INSTALL_FLAG"
-
-echo ""
-echo "========================================="
-echo "  Runtipi Installation Complete!"
-echo "========================================="
-echo ""
-echo "Access Runtipi at:"
-echo "  http://runtipios.local"
-echo "  http://$(hostname -I | awk '{print $1}')"
-echo ""
+# Download and run installer with error handling
+if curl -fsSL https://setup.runtipi.io -o /tmp/runtipi-installer.sh 2>>"$LOG_FILE"; then
+    log "Installer downloaded successfully"
+    log "Running installation script..."
+    
+    if bash /tmp/runtipi-installer.sh >> "$LOG_FILE" 2>&1; then
+        # Mark as installed
+        touch "$INSTALL_FLAG"
+        
+        log "========================================="
+        log "  Runtipi Installation Complete!"
+        log "========================================="
+        log ""
+        log "Access Runtipi at:"
+        log "  http://runtipios.local"
+        log "  http://$(hostname -I | awk '{print $1}')"
+        log ""
+        
+        # Cleanup
+        rm -f /tmp/runtipi-installer.sh
+        
+        exit 0
+    else
+        log "ERROR: Runtipi installation script failed"
+        log "Check logs: cat $LOG_FILE"
+        log "Retry manually: curl -L https://setup.runtipi.io | bash"
+        exit 1
+    fi
+else
+    log "ERROR: Failed to download Runtipi installer"
+    log "Check internet connection and try again"
+    exit 1
+fi
