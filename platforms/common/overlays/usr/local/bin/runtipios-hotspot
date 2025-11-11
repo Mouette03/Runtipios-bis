@@ -6,46 +6,61 @@ SSID="RuntipiOS-Setup"
 PASSWORD="runtipios2024"
 CHANNEL=6
 SUBNET="192.168.42"
+LOG_FILE="/tmp/runtipios-hotspot.log"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
 
 start_hotspot() {
-    echo "Starting WiFi hotspot: $SSID"
+    log "=== Starting WiFi hotspot: $SSID ==="
     
     # Check if interface exists
     if ! ip link show $INTERFACE &>/dev/null; then
-        echo "Error: Interface $INTERFACE not found"
+        log "ERROR: Interface $INTERFACE not found"
+        log "Available interfaces:"
+        ip link show | grep -E '^[0-9]+:' | tee -a "$LOG_FILE"
         exit 1
     fi
     
+    log "Interface $INTERFACE found"
+    
     # Check if Ethernet cable is physically connected (carrier detected)
     ETH_CONNECTED=false
-    for eth_if in eth0 end0; do
-        if [ -f "/sys/class/net/$eth_if/carrier" ] 2>/dev/null; then
-            carrier=$(cat /sys/class/net/$eth_if/carrier 2>/dev/null || echo 0)
-            if [ "$carrier" = "1" ]; then
-                echo "Ethernet cable detected on $eth_if - hotspot not needed"
-                ETH_CONNECTED=true
-                break
+    for eth_if in eth0 end0 enp*; do
+        if [ -d "/sys/class/net/$eth_if" ] 2>/dev/null; then
+            if [ -f "/sys/class/net/$eth_if/carrier" ]; then
+                carrier=$(cat /sys/class/net/$eth_if/carrier 2>/dev/null || echo 0)
+                log "Checking $eth_if: carrier=$carrier"
+                if [ "$carrier" = "1" ]; then
+                    log "Ethernet cable detected on $eth_if - hotspot not needed"
+                    ETH_CONNECTED=true
+                    break
+                fi
             fi
         fi
     done
     
     # Also check if WiFi is already configured
     if [ -f "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" ]; then
-        echo "WiFi already configured - hotspot not needed"
+        log "WiFi already configured - hotspot not needed"
         exit 1  # Return error to prevent service from staying active
     fi
     
     if [ "$ETH_CONNECTED" = true ]; then
-        echo "Ethernet connection available, skipping hotspot activation"
+        log "Ethernet connection available, skipping hotspot activation"
         exit 1  # Return error to prevent service from staying active
     fi
     
-    echo "No Ethernet or WiFi configured - activating WiFi hotspot"
+    log "No Ethernet or WiFi configured - activating WiFi hotspot"
     
     # Unblock WiFi if blocked
+    log "Unblocking WiFi..."
     rfkill unblock wifi 2>/dev/null || true
     
     # Stop conflicting services
+    log "Stopping conflicting services..."
     systemctl stop wpa_supplicant@wlan0 2>/dev/null || true
     systemctl stop dhcpcd 2>/dev/null || true
     
@@ -54,6 +69,7 @@ start_hotspot() {
     killall dhcpcd 2>/dev/null || true
     
     # Configure interface
+    log "Configuring interface $INTERFACE..."
     ip link set dev $INTERFACE down
     sleep 1
     ip addr flush dev $INTERFACE
@@ -61,7 +77,10 @@ start_hotspot() {
     ip link set dev $INTERFACE up
     sleep 2
     
+    log "Interface configured with IP ${SUBNET}.1"
+    
     # Configure hostapd
+    log "Configuring hostapd..."
     cat > /etc/hostapd/hostapd.conf << EOF
 interface=$INTERFACE
 driver=nl80211
@@ -83,6 +102,7 @@ ieee80211d=1
 EOF
     
     # Configure dnsmasq
+    log "Configuring dnsmasq..."
     cat > /etc/dnsmasq.d/hotspot.conf << EOF
 interface=$INTERFACE
 bind-interfaces
@@ -98,22 +118,35 @@ log-dhcp
 EOF
     
     # Start services
-    echo "Starting hostapd..."
-    hostapd -B /etc/hostapd/hostapd.conf
+    log "Starting hostapd..."
+    if hostapd -B /etc/hostapd/hostapd.conf 2>&1 | tee -a "$LOG_FILE"; then
+        log "hostapd started successfully"
+    else
+        log "ERROR: hostapd failed to start"
+        exit 1
+    fi
     sleep 2
     
-    echo "Starting dnsmasq..."
-    dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf
+    log "Starting dnsmasq..."
+    if dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf 2>&1 | tee -a "$LOG_FILE"; then
+        log "dnsmasq started successfully"
+    else
+        log "ERROR: dnsmasq failed to start"
+        exit 1
+    fi
     
-    echo "Starting web server..."
-    systemctl start lighttpd 2>/dev/null || true
+    log "Starting web server..."
+    systemctl start lighttpd 2>&1 | tee -a "$LOG_FILE" || true
     
-    echo "Hotspot started: $SSID / $PASSWORD"
-    echo "Web portal: http://${SUBNET}.1"
+    log "=== Hotspot started successfully ==="
+    log "SSID: $SSID"
+    log "Password: $PASSWORD"
+    log "Web portal: http://${SUBNET}.1"
+}
 }
 
 stop_hotspot() {
-    echo "Stopping WiFi hotspot"
+    log "=== Stopping WiFi hotspot ==="
     killall hostapd 2>/dev/null || true
     killall dnsmasq 2>/dev/null || true
     systemctl stop lighttpd 2>/dev/null || true
@@ -121,6 +154,7 @@ stop_hotspot() {
     rm -f /etc/dnsmasq.d/hotspot.conf
     ip addr flush dev $INTERFACE 2>/dev/null || true
     ip link set dev $INTERFACE down 2>/dev/null || true
+    log "Hotspot stopped"
 }
 
 case "$1" in

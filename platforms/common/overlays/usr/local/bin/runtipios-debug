@@ -1,0 +1,99 @@
+#!/bin/bash
+# RuntipiOS Diagnostic Script
+
+echo "========================================="
+echo "  RuntipiOS Diagnostic Report"
+echo "========================================="
+echo ""
+
+echo "=== System Info ==="
+echo "Hostname: $(hostname)"
+echo "Date: $(date)"
+echo "Uptime: $(uptime -p)"
+echo ""
+
+echo "=== Network Interfaces ==="
+ip -br addr show
+echo ""
+
+echo "=== Ethernet Status ==="
+for eth in eth0 end0 enp*; do
+    if [ -d "/sys/class/net/$eth" ] 2>/dev/null; then
+        carrier=$(cat /sys/class/net/$eth/carrier 2>/dev/null || echo "N/A")
+        operstate=$(cat /sys/class/net/$eth/operstate 2>/dev/null || echo "N/A")
+        echo "$eth: carrier=$carrier, operstate=$operstate"
+    fi
+done
+echo ""
+
+echo "=== WiFi Status ==="
+if [ -d "/sys/class/net/wlan0" ]; then
+    echo "wlan0: exists"
+    rfkill list wifi
+    iwconfig wlan0 2>/dev/null || echo "iwconfig failed"
+else
+    echo "wlan0: NOT FOUND"
+fi
+echo ""
+
+echo "=== Internet Connectivity ==="
+if ping -c 1 -W 2 8.8.8.8 &>/dev/null; then
+    echo "✓ Internet via 8.8.8.8: OK"
+else
+    echo "✗ Internet via 8.8.8.8: FAILED"
+fi
+
+if ping -c 1 -W 2 1.1.1.1 &>/dev/null; then
+    echo "✓ Internet via 1.1.1.1: OK"
+else
+    echo "✗ Internet via 1.1.1.1: FAILED"
+fi
+echo ""
+
+echo "=== Service Status ==="
+echo "runtipios-setup:"
+systemctl status runtipios-setup --no-pager -l | head -5
+
+echo ""
+echo "runtipios-hotspot:"
+systemctl status runtipios-hotspot --no-pager -l | head -5
+
+echo ""
+echo "runtipi-install:"
+systemctl status runtipi-install --no-pager -l | head -5
+
+echo ""
+echo "lighttpd:"
+systemctl status lighttpd --no-pager -l | head -5
+echo ""
+
+echo "=== Running Processes ==="
+ps aux | grep -E "(hostapd|dnsmasq|lighttpd|wpa_supplicant)" | grep -v grep
+echo ""
+
+echo "=== Log Files ==="
+if [ -f /tmp/runtipios-hotspot.log ]; then
+    echo "Hotspot log (last 10 lines):"
+    tail -10 /tmp/runtipios-hotspot.log
+else
+    echo "No hotspot log found"
+fi
+
+echo ""
+if [ -f /tmp/runtipi-install.log ]; then
+    echo "Runtipi install log (last 10 lines):"
+    tail -10 /tmp/runtipi-install.log
+else
+    echo "No runtipi install log found"
+fi
+
+echo ""
+echo "=== Configuration Files ==="
+echo "WiFi configured: $([ -f /etc/wpa_supplicant/wpa_supplicant-wlan0.conf ] && echo 'YES' || echo 'NO')"
+echo "RuntipiOS configured: $([ -f /etc/runtipios-configured ] && echo 'YES' || echo 'NO')"
+echo "Runtipi installed: $([ -f /home/runtipi/.runtipi-installed ] && echo 'YES' || echo 'NO')"
+echo ""
+
+echo "========================================="
+echo "  End of Diagnostic Report"
+echo "========================================="

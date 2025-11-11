@@ -9,6 +9,10 @@ esac
 # Aliases
 alias ll='ls -lah'
 alias update='sudo apt update && sudo apt upgrade -y'
+alias debug='sudo runtipios-debug'
+alias hotspot-status='systemctl status runtipios-hotspot'
+alias hotspot-logs='cat /tmp/runtipios-hotspot.log'
+alias hotspot-start='sudo systemctl start runtipios-hotspot'
 alias runtipi-status='systemctl status runtipi-install'
 alias runtipi-logs='journalctl -u runtipi-install -f'
 alias runtipi-install-log='tail -f /tmp/runtipi-install.log'
@@ -26,15 +30,25 @@ if [ ! -f ~/.runtipi_welcome_shown ]; then
 
 Runtipi will install automatically when internet is available.
 
+Quick diagnostic:
+  debug  - Show complete system diagnostic
+
 Check installation status:
   systemctl status runtipi-install
   journalctl -u runtipi-install -f
   tail -f /tmp/runtipi-install.log  (detailed installation log)
 
+Check hotspot status:
+  systemctl status runtipios-hotspot
+  cat /tmp/runtipios-hotspot.log
+
 After installation:
   Access at: http://runtipios.local OR http://YOUR_IP
 
 Useful commands:
+  debug                 - Complete system diagnostic
+  hotspot-status        - Check hotspot status
+  hotspot-logs          - View hotspot logs
   runtipi-status        - Check installation status
   runtipi-logs          - View systemd logs
   runtipi-install-log   - View detailed installation log

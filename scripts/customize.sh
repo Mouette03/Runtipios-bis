@@ -235,6 +235,10 @@ systemctl enable ssh
 systemctl disable userconfig.service 2>/dev/null || true
 systemctl mask userconfig.service 2>/dev/null || true
 
+# Disable resize2fs_once (we handle partition resize differently)
+systemctl disable resize2fs_once.service 2>/dev/null || true
+systemctl mask resize2fs_once.service 2>/dev/null || true
+
 # Disable lighttpd by default (started only by hotspot script)
 systemctl disable lighttpd 2>/dev/null || true
 
@@ -282,17 +286,21 @@ configure_boot() {
 ║  Runtipi will install automatically when internet is         ║
 ║  detected (Ethernet or WiFi).                                ║
 ║                                                               ║
+║  TROUBLESHOOTING:                                            ║
+║    Run: debug  (shows complete diagnostic)                   ║
+║                                                               ║
 ║  Access web interface after installation:                    ║
 ║    http://runtipios.local                                    ║
 ║    http://YOUR_IP_ADDRESS                                    ║
 ║                                                               ║
 ║  WiFi Setup (if no Ethernet):                                ║
-║    1. Connect to hotspot: RuntipiOS-Setup                    ║
+║    1. Hotspot should appear: RuntipiOS-Setup                 ║
 ║    2. Password: runtipios2024                                ║
 ║    3. Configure WiFi via web portal                          ║
 ║    4. Runtipi installs automatically after connection        ║
 ║                                                               ║
-║  Check installation status:                                  ║
+║  Check status:                                               ║
+║    systemctl status runtipios-hotspot                        ║
 ║    systemctl status runtipi-install                          ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝

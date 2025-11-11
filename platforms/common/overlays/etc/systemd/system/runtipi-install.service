@@ -7,14 +7,16 @@ Wants=network-online.target
 Type=simple
 User=runtipi
 # Give network time to fully initialize
-ExecStartPre=/bin/sleep 15
-# Wait for internet connectivity (max 2 minutes with better error handling)
-ExecStartPre=/bin/bash -c 'for i in {1..24}; do (ping -c1 -W2 8.8.8.8 || ping -c1 -W2 1.1.1.1) &>/dev/null && exit 0; sleep 5; done; echo "No internet after 2 min"; exit 1'
+ExecStartPre=/bin/sleep 20
+# Wait for internet connectivity (max 3 minutes with better error handling)
+ExecStartPre=/bin/bash -c 'echo "Waiting for internet connection..."; for i in {1..36}; do if ping -c1 -W2 8.8.8.8 &>/dev/null || ping -c1 -W2 1.1.1.1 &>/dev/null; then echo "Internet connected!"; exit 0; fi; echo "Attempt $i/36 - No internet yet..."; sleep 5; done; echo "ERROR: No internet after 3 minutes"; exit 1'
 ExecStart=/usr/local/bin/runtipi-install
 StandardOutput=journal
 StandardError=journal
-TimeoutStartSec=2400
+TimeoutStartSec=3600
 Restart=no
+# If service fails, log helpful message
+ExecStopPost=/bin/bash -c 'if [ "$SERVICE_RESULT" != "success" ]; then echo "Runtipi installation failed. Run: sudo runtipios-debug"; fi'
 
 [Install]
 WantedBy=multi-user.target
