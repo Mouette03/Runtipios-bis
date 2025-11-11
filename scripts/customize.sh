@@ -231,6 +231,10 @@ systemctl enable avahi-daemon
 # Enable SSH
 systemctl enable ssh
 
+# Disable Raspberry Pi OS default services that expect 'pi' user
+systemctl disable userconfig.service 2>/dev/null || true
+systemctl mask userconfig.service 2>/dev/null || true
+
 # Disable unnecessary services
 systemctl disable apt-daily.timer
 systemctl disable apt-daily-upgrade.timer
@@ -253,6 +257,9 @@ configure_boot() {
     
     # Enable SSH
     touch "${MOUNT_BOOT}/ssh"
+    
+    # Remove userconf trigger file (prevents userconfig.service from running)
+    rm -f "${MOUNT_BOOT}/userconf" "${MOUNT_BOOT}/userconf.txt"
     
     # Create welcome message
     cat > "${MOUNT_ROOT}/etc/motd" << 'EOF'
