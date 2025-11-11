@@ -235,6 +235,15 @@ systemctl enable ssh
 systemctl disable userconfig.service 2>/dev/null || true
 systemctl mask userconfig.service 2>/dev/null || true
 
+# Disable lighttpd by default (started only by hotspot script)
+systemctl disable lighttpd 2>/dev/null || true
+
+# Disable dnsmasq by default (started only by hotspot script)
+systemctl disable dnsmasq 2>/dev/null || true
+
+# Disable hostapd by default (started only by hotspot script)
+systemctl disable hostapd 2>/dev/null || true
+
 # Disable unnecessary services
 systemctl disable apt-daily.timer
 systemctl disable apt-daily-upgrade.timer

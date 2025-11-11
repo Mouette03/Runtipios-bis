@@ -32,12 +32,12 @@ start_hotspot() {
     # Also check if WiFi is already configured
     if [ -f "/etc/wpa_supplicant/wpa_supplicant-wlan0.conf" ]; then
         echo "WiFi already configured - hotspot not needed"
-        exit 0
+        exit 1  # Return error to prevent service from staying active
     fi
     
     if [ "$ETH_CONNECTED" = true ]; then
         echo "Ethernet connection available, skipping hotspot activation"
-        exit 0
+        exit 1  # Return error to prevent service from staying active
     fi
     
     echo "No Ethernet or WiFi configured - activating WiFi hotspot"
