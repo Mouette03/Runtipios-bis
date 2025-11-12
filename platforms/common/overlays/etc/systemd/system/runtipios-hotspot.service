@@ -2,7 +2,8 @@
 Description=RuntipiOS WiFi Hotspot (only if no Ethernet)
 After=network-online.target systemd-networkd-wait-online.service
 Wants=network-online.target
-Conflicts=wpa_supplicant@wlan0.service
+# Stop these when hotspot runs to avoid conflicts
+Conflicts=wpa_supplicant@wlan0.service NetworkManager.service dnsmasq.service
 ConditionPathExists=!/etc/wpa_supplicant/wpa_supplicant-wlan0.conf
 
 [Service]
@@ -13,7 +14,7 @@ ExecStartPre=/bin/sleep 10
 ExecStartPre=/bin/bash -c 'echo "=== runtipios-hotspot starting ===" >> /tmp/runtipios-hotspot.log'
 ExecStart=/usr/local/bin/runtipios-hotspot start
 ExecStop=/usr/local/bin/runtipios-hotspot stop
-TimeoutStartSec=60
+TimeoutStartSec=90
 # Don't restart if it exits (Ethernet detected)
 Restart=no
 

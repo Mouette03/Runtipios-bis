@@ -64,12 +64,15 @@ start_hotspot() {
     rfkill unblock wifi 2>/dev/null || true
     
     # Stop conflicting services
-    log "Stopping conflicting services..."
+    log "Stopping conflicting services (wpa_supplicant, dnsmasq, NetworkManager, dhcpcd)..."
     systemctl stop wpa_supplicant@wlan0 2>/dev/null || true
+    systemctl stop dnsmasq 2>/dev/null || true
+    systemctl stop NetworkManager 2>/dev/null || true
     systemctl stop dhcpcd 2>/dev/null || true
     
     # Kill any existing processes
     killall wpa_supplicant 2>/dev/null || true
+    killall dnsmasq 2>/dev/null || true
     killall dhcpcd 2>/dev/null || true
     
     # Configure interface
@@ -82,6 +85,10 @@ start_hotspot() {
     sleep 2
     
     log "Interface configured with IP ${SUBNET}.1"
+    
+    # Mark hotspot as active for other components (e.g., captive portal)
+    mkdir -p /run/runtipios
+    echo on > /run/runtipios/hotspot.active
     
     # Configure hostapd
     log "Configuring hostapd..."
@@ -157,23 +164,9 @@ EOF
     log "Password: $PASSWORD"
     log "Web portal: http://${SUBNET}.1"
     
-    # Keep running (don't exit)
+    # Keep running (don't exit) - minimal heartbeat loop
     log "Hotspot is running. Press Ctrl+C or stop service to exit."
-    
-    # Wait indefinitely (service type=simple requires this)
-    while true; do
-        sleep 60
-        # Check if hostapd is still running
-        if ! pgrep hostapd > /dev/null; then
-            log "ERROR: hostapd process died, restarting..."
-            hostapd -B /etc/hostapd/hostapd.conf 2>&1 | tee -a "$LOG_FILE"
-        fi
-        # Check if dnsmasq is still running
-        if ! pgrep dnsmasq > /dev/null; then
-            log "ERROR: dnsmasq process died, restarting..."
-            dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf 2>&1 | tee -a "$LOG_FILE"
-        fi
-    done
+    while sleep 60; do :; done
 }
 }
 
@@ -186,6 +179,7 @@ stop_hotspot() {
     rm -f /etc/dnsmasq.d/hotspot.conf
     ip addr flush dev $INTERFACE 2>/dev/null || true
     ip link set dev $INTERFACE down 2>/dev/null || true
+    rm -f /run/runtipios/hotspot.active
     log "Hotspot stopped"
 }
 

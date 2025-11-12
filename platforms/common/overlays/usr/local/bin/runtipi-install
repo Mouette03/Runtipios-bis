@@ -5,6 +5,11 @@ RUNTIPI_DIR="$HOME/runtipi"
 INSTALL_FLAG="$HOME/.runtipi-installed"
 LOG_FILE="/tmp/runtipi-install.log"
 
+# Ensure we run in the user's home and have a sane environment
+cd "$HOME" || cd /
+export DEBIAN_FRONTEND=noninteractive
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 # Function to log with timestamp
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
@@ -52,6 +57,13 @@ log "This may take 10-30 minutes depending on your connection..."
 log "Installation log: $LOG_FILE"
 
 # Download and run installer with error handling
+if command -v curl >/dev/null 2>&1; then
+    log "curl found"
+else
+    log "ERROR: curl is not installed"
+    exit 1
+fi
+
 if curl -fsSL https://setup.runtipi.io -o /tmp/runtipi-installer.sh 2>>"$LOG_FILE"; then
     log "Installer downloaded successfully"
     log "Running installation script..."

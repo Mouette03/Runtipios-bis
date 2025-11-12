@@ -86,6 +86,7 @@ apt-get install -y --no-install-recommends \
     dnsmasq \
     lighttpd \
     iptables \
+    rfkill \
     iw \
     wireless-tools \
     curl \
@@ -279,29 +280,29 @@ configure_boot() {
 ╔═══════════════════════════════════════════════════════════════╗
 ║                      Welcome to RuntipiOS!                    ║
 ║                                                               ║
-║  Lightweight Linux distribution for running Runtipi          ║
+║  Lightweight Linux distribution for running Runtipi           ║
 ║                                                               ║
-║  Default login: runtipi / runtipi                            ║
+║  Default login: runtipi / runtipi                             ║
 ║                                                               ║
-║  Runtipi will install automatically when internet is         ║
-║  detected (Ethernet or WiFi).                                ║
+║  Runtipi will install automatically when internet is          ║
+║  detected (Ethernet or WiFi).                                 ║
 ║                                                               ║
-║  TROUBLESHOOTING:                                            ║
-║    Run: debug  (shows complete diagnostic)                   ║
+║  TROUBLESHOOTING:                                             ║
+║    Run: debug  (shows complete diagnostic)                    ║
 ║                                                               ║
-║  Access web interface after installation:                    ║
-║    http://runtipios.local                                    ║
-║    http://YOUR_IP_ADDRESS                                    ║
+║  Access web interface after installation:                     ║
+║    http://runtipios.local                                     ║
+║    http://YOUR_IP_ADDRESS                                     ║
 ║                                                               ║
-║  WiFi Setup (if no Ethernet):                                ║
-║    1. Hotspot should appear: RuntipiOS-Setup                 ║
-║    2. Password: runtipios2024                                ║
-║    3. Configure WiFi via web portal                          ║
-║    4. Runtipi installs automatically after connection        ║
+║  WiFi Setup (if no Ethernet):                                 ║
+║    1. Hotspot should appear: RuntipiOS-Setup                  ║
+║    2. Password: runtipios2024                                 ║
+║    3. Configure WiFi via web portal                           ║
+║    4. Runtipi installs automatically after connection         ║
 ║                                                               ║
-║  Check status:                                               ║
-║    systemctl status runtipios-hotspot                        ║
-║    systemctl status runtipi-install                          ║
+║  Check status:                                                ║
+║    systemctl status runtipios-hotspot                         ║
+║    systemctl status runtipi-install                           ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 EOF
