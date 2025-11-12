@@ -26,9 +26,13 @@ start_hotspot() {
     
     log "Interface $INTERFACE found"
     
+    # Wait a bit for network to stabilize
+    log "Waiting 5 seconds for network stabilization..."
+    sleep 5
+    
     # Check if Ethernet cable is physically connected (carrier detected)
     ETH_CONNECTED=false
-    for eth_if in eth0 end0 enp*; do
+    for eth_if in eth0 end0 enp* enx*; do
         if [ -d "/sys/class/net/$eth_if" ] 2>/dev/null; then
             if [ -f "/sys/class/net/$eth_if/carrier" ]; then
                 carrier=$(cat /sys/class/net/$eth_if/carrier 2>/dev/null || echo 0)
@@ -119,29 +123,57 @@ EOF
     
     # Start services
     log "Starting hostapd..."
-    if hostapd -B /etc/hostapd/hostapd.conf 2>&1 | tee -a "$LOG_FILE"; then
+    hostapd -B /etc/hostapd/hostapd.conf 2>&1 | tee -a "$LOG_FILE"
+    HOSTAPD_EXIT=$?
+    
+    if [ $HOSTAPD_EXIT -eq 0 ]; then
         log "hostapd started successfully"
     else
-        log "ERROR: hostapd failed to start"
+        log "ERROR: hostapd failed with exit code $HOSTAPD_EXIT"
+        log "Check hostapd configuration and WiFi driver"
         exit 1
     fi
-    sleep 2
+    
+    sleep 3
     
     log "Starting dnsmasq..."
-    if dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf 2>&1 | tee -a "$LOG_FILE"; then
+    dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf 2>&1 | tee -a "$LOG_FILE"
+    DNSMASQ_EXIT=$?
+    
+    if [ $DNSMASQ_EXIT -eq 0 ]; then
         log "dnsmasq started successfully"
     else
-        log "ERROR: dnsmasq failed to start"
+        log "ERROR: dnsmasq failed with exit code $DNSMASQ_EXIT"
+        log "Stopping hostapd..."
+        killall hostapd
         exit 1
     fi
     
     log "Starting web server..."
-    systemctl start lighttpd 2>&1 | tee -a "$LOG_FILE" || true
+    systemctl start lighttpd 2>&1 | tee -a "$LOG_FILE"
     
     log "=== Hotspot started successfully ==="
     log "SSID: $SSID"
     log "Password: $PASSWORD"
     log "Web portal: http://${SUBNET}.1"
+    
+    # Keep running (don't exit)
+    log "Hotspot is running. Press Ctrl+C or stop service to exit."
+    
+    # Wait indefinitely (service type=simple requires this)
+    while true; do
+        sleep 60
+        # Check if hostapd is still running
+        if ! pgrep hostapd > /dev/null; then
+            log "ERROR: hostapd process died, restarting..."
+            hostapd -B /etc/hostapd/hostapd.conf 2>&1 | tee -a "$LOG_FILE"
+        fi
+        # Check if dnsmasq is still running
+        if ! pgrep dnsmasq > /dev/null; then
+            log "ERROR: dnsmasq process died, restarting..."
+            dnsmasq --conf-file=/etc/dnsmasq.d/hotspot.conf 2>&1 | tee -a "$LOG_FILE"
+        fi
+    done
 }
 }
 

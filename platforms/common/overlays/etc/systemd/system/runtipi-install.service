@@ -1,22 +1,23 @@
 [Unit]
 Description=Runtipi Auto-Installation Service
-After=network-online.target runtipios-setup.service runtipios-hotspot.service
+After=network-online.target runtipios-setup.service
 Wants=network-online.target
+# Only start if internet is potentially available
+# Don't block on hotspot service
 
 [Service]
 Type=simple
 User=runtipi
-# Give network time to fully initialize
-ExecStartPre=/bin/sleep 20
-# Wait for internet connectivity (max 3 minutes with better error handling)
-ExecStartPre=/bin/bash -c 'echo "Waiting for internet connection..."; for i in {1..36}; do if ping -c1 -W2 8.8.8.8 &>/dev/null || ping -c1 -W2 1.1.1.1 &>/dev/null; then echo "Internet connected!"; exit 0; fi; echo "Attempt $i/36 - No internet yet..."; sleep 5; done; echo "ERROR: No internet after 3 minutes"; exit 1'
+# Give network plenty of time to initialize
+ExecStartPre=/bin/sleep 30
+# Log start
+ExecStartPre=/bin/bash -c 'echo "=== runtipi-install starting ===" >> /tmp/runtipi-install.log'
 ExecStart=/usr/local/bin/runtipi-install
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=3600
+# Don't restart automatically
 Restart=no
-# If service fails, log helpful message
-ExecStopPost=/bin/bash -c 'if [ "$SERVICE_RESULT" != "success" ]; then echo "Runtipi installation failed. Run: sudo runtipios-debug"; fi'
 
 [Install]
 WantedBy=multi-user.target
